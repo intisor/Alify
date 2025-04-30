@@ -1,0 +1,22 @@
+﻿@page
+@model DashboardModel
+
+<h2>Now Playing</h2>
+
+@if (Model.TrackName != null)
+{
+    <div>
+        <p><strong>@Model.TrackName</strong> by @Model.ArtistName</p>
+        <p>@Model.Message</p>
+        <dl>
+            <dt>Lyrics:</dt>
+            <dd>@Model.Lyric</dd>
+        </dl>
+        <img src="@Model.AlbumArtUrl" width="300" />
+    </div>
+}
+else
+{
+    <p>No track currently playing.</p>
+}
+
