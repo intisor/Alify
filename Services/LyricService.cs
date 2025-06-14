@@ -1,7 +1,9 @@
 ﻿using Alify.Models;
+using HtmlAgilityPack;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Web;
 using static System.Net.WebRequestMethods;
 
@@ -17,7 +19,7 @@ namespace Alify.Services
             _httpClient = httpClient;
             _configuration = configuration;
         }
-        public async Task<string> GetLyricsAsync(string artist,string title)
+        public async Task<string> GetLyricsAsync(string artist, string title)
         {
             // 1. Try Lyrics.ovh
             var ovhLyrics = await TryGetLyricsFromOvhAsync(artist, title);
@@ -28,19 +30,19 @@ namespace Alify.Services
             var geniusLyrics = await GetLyricsFromGeniusAsync(title, artist);
             return !string.IsNullOrWhiteSpace(geniusLyrics)
                 ? geniusLyrics
-                : "❌ No lyrics found from any source.";
+                : null;
         }
         private async Task<string> TryGetLyricsFromOvhAsync(string artist, string title)
         {
-                var url = $"https://api.lyrics.ovh/v1/{HttpUtility.UrlEncode(artist)}/{HttpUtility.UrlEncode(title)}";
-                var response = await _httpClient.GetAsync(url);
+            var url = $"https://api.lyrics.ovh/v1/{HttpUtility.UrlEncode(artist)}/{HttpUtility.UrlEncode(title)}";
+            var response = await _httpClient.GetAsync(url);
 
-                if (response.IsSuccessStatusCode)
-                {
-                    var json = await response.Content.ReadAsStringAsync();
-                    var doc = JsonDocument.Parse(json);
-                    return doc.RootElement.GetProperty("lyrics").GetString();
-                }
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync();
+                var doc = JsonDocument.Parse(json);
+                return doc.RootElement.GetProperty("lyrics").GetString();
+            }
             return null;
         }
 
@@ -50,40 +52,38 @@ namespace Alify.Services
             var geniusKey = _configuration["Genius:token"];
             var searchUrl = $"https://api.genius.com/search?q={query}";
 
-            _httpClient.DefaultRequestHeaders.Authorization =
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
 
-                var response = await _httpClient.GetAsync(searchUrl);
-                if (!response.IsSuccessStatusCode) return null;
+            var response = await _httpClient.GetAsync(searchUrl);
+            if (!response.IsSuccessStatusCode) return null;
 
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
 
-                var hit = doc.RootElement
-                    .GetProperty("response")
-                    .GetProperty("hits")
-                    .EnumerateArray()
-                    .FirstOrDefault();
+            var hit = doc.RootElement.GetProperty("response").GetProperty("hits").EnumerateArray().FirstOrDefault();
+            if (hit.ValueKind == JsonValueKind.Undefined) return null;
 
-                if (hit.ValueKind == JsonValueKind.Undefined) return null;
+            var songUrl = hit.GetProperty("result").GetProperty("url").GetString();
+            if (string.IsNullOrEmpty(songUrl)) return null;
 
-                var url = hit.GetProperty("result").GetProperty("url").GetString();
-                if (string.IsNullOrEmpty(url)) return null;
+            // Step 2: Scrape lyrics
+            var html = await _httpClient.GetStringAsync(songUrl);
+            var htmlDoc = new HtmlDocument();
+            htmlDoc.LoadHtml(html);
 
-                // Step 2: Scrape lyrics from the page
-                var html = await _httpClient.GetStringAsync(url);
-                var htmlDoc = new HtmlAgilityPack.HtmlDocument();
-                htmlDoc.LoadHtml(html);
+            var lyricsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'Lyrics__Container')]");
+            if (lyricsNode == null) return null;
 
-                // Find the lyrics container
-                var lyricsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[@data-lyrics-container='true']");
-                if (lyricsNode == null) return null;
+            // Step 3: Clean lyrics
+            var lyrics = lyricsNode.InnerText;
+            lyrics = Regex.Replace(lyrics, @"\[.*?\]", ""); // Remove [Chorus], [Verse], etc.
+            // lyrics = Regex.Replace(lyrics, @"\n{2,}", "\n"); // Collapse newlines
+            lyrics = HttpUtility.HtmlDecode(lyrics);
+            lyrics = lyrics.Trim();
 
-                var lyrics = string.Join("\n", lyricsNode.Descendants()
-                    .Where(n => n.Name == "p" || n.Name == "br" || n.Name == "#text")
-                    .Select(n => n.InnerText.Trim()));
-
-                return string.IsNullOrWhiteSpace(lyrics) ? null : lyrics;
+            return string.IsNullOrWhiteSpace(lyrics) ? null : lyrics;
         }
 
         public async Task<LyricsModerationResult> ModerateLyricsAsync(string lyrics)
@@ -96,17 +96,20 @@ namespace Alify.Services
             {
                 contents = new[]
                 {
-            new {
-                parts = new[] {
-                    new {
-                        text = $"Return only valid JSON like:\n" +
-                               "{{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }}\n\n" +
-                               $"Lyrics:\n{lyrics}"
+                    new 
+                    {
+                        parts = new[] 
+                        {
+                            new 
+                            {
+                                text = $"Return only valid JSON like:\n" +
+                                    "{{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }}\n\n" +
+                                    $"Lyrics:\n{lyrics}"
+                            }
+                        },
+                        role = "user"
                     }
-                },
-                role = "user"
-            }
-        }
+                }
             };
 
             var requestJson = JsonSerializer.Serialize(prompt);
@@ -120,7 +123,10 @@ namespace Alify.Services
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-
+            if (responseString is null)
+            {
+                return null;
+            }
             using var doc = JsonDocument.Parse(responseString);
             var textResponse = doc
                 .RootElement
@@ -130,7 +136,7 @@ namespace Alify.Services
                 .GetProperty("text")
                 .GetString();
 
-            // Try to isolate clean JSON from any extra text
+ 
             var jsonStart = textResponse?.IndexOf('{') ?? -1;
             var jsonEnd = textResponse?.LastIndexOf('}') ?? -1;
 

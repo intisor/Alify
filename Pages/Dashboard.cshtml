@@ -7,10 +7,9 @@
 {
     <div>
         <p><strong>@Model.TrackName</strong> by @Model.ArtistName</p>
-        <p>@Model.Message</p>
         <dl>
             <dt>Lyrics:</dt>
-            <dd>@Model.Lyric</dd>
+            <dd><pre>@Model.Lyric</pre></dd>
         </dl>
         <img src="@Model.AlbumArtUrl" width="300" />
     </div>
@@ -19,4 +18,46 @@ else
 {
     <p>No track currently playing.</p>
 }
+<div>
+    <h3>Queue</h3>
+    @if (Model.PlaybackInfo?.Queue?.Any() == true)
+    {
+        <ul>
+            @foreach (var track in Model.PlaybackInfo.Queue ?? new List<SpotifyAPI.Web.FullTrack>())
+            {
+                <li>@track.Name by @track.Artists[0].Name @(Model.PlaybackInfo.IsFlagged.Contains(track.Uri) ? "(Flagged)" : "")</li>
+            }
+        </ul>
+    }
+    else
+    {
+        <p>Queue is empty.</p>
+    }
+</div>
 
+<div>
+    <p>Status: @Model.StatusMessage</p>
+    <form method="post">
+        <button asp-page-handler="StartMonitor">Start Monitoring</button>
+         <button asp-page-handler="StopMonitor">Stop Monitoring</button>
+    </form>
+</div>
+
+@* <script> *@
+@*     async function updateDashboard() { *@
+@*             const data = await response.json(); *@
+@*             // Update Now Playing *@
+@*             const nowPlaying = document.querySelector('h2').nextElementSibling; *@
+@*             nowPlaying.innerHTML = data.currentlyPlaying *@
+@*                 ? `<p><strong>${data.currentlyPlaying.name}</strong> by ${data.currentlyPlaying.artist}</p>` + *@
+@*                   `<dl><dt>Lyrics:</dt><dd><pre>${data.currentLyrics || 'No lyrics available'}</pre></dd></dl>` + *@
+@*                   `<img src="${data.currentlyPlaying.albumArtUrl}" width="300" alt="Album Art" />` *@
+@*                 : `<p>No track currently playing.</p>`; *@
+@*             // Update Queue *@
+@*             const queue = document.querySelector('h3').nextElementSibling; *@
+@*             queue.innerHTML = data.queue?.length *@
+@*                 ? `<ul>${data.queue.map(t => `<li>${t.name} by ${t.artists[0].name}${t.isFlagged ? ' (Flagged)' : ''}</li>`).join('')}</ul>` *@
+@*                 : `<p>Queue is empty.</p>`; *@
+@*     } *@
+@*     setInterval(updateDashboard, 5000); // Poll every 5 seconds *@
+@* </script> *@

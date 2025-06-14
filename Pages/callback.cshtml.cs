@@ -14,25 +14,14 @@ namespace Alify.Pages
             _httpContextAccessor = httpContextAccessor;
         }
 
-        public async Task<IActionResult> OnGetAsync(string code)
+        public async Task<IActionResult> OnGetAsync(string code, string state)
         {
-            if (string.IsNullOrEmpty(code))
-                return BadRequest("Missing code.");
+            var storedState = HttpContext.Session.GetString("State");
+            if (state != storedState) return BadRequest("Invalid state parameter");
 
-            // Fix: Adjusted to match the actual return type of ProcessCallbackAsync  
-            var result = await _spotifyService.ProcessCallbackAsync(code);
+            var spotifyService = HttpContext.RequestServices.GetRequiredService<SpotifyService>();
+            await spotifyService.UpdateAuthAsync(code);
 
-            // Assuming ProcessCallbackAsync returns a tuple (SpotifyClient, string)  
-            var spotifyClient = result.Item1;
-            var accessToken = result.Item2;
-
-            if (spotifyClient == null || string.IsNullOrEmpty(accessToken))
-                return BadRequest("Failed to authenticate.");
-
-            // Save access token to session for reuse  
-            _httpContextAccessor.HttpContext?.Session.SetString("SpotifyAccessToken", accessToken);
-
-            // Redirect to dashboard or wherever next  
             return RedirectToPage("/Dashboard");
         }
     }

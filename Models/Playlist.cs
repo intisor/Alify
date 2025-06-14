@@ -10,18 +10,17 @@ namespace Alify.Models
         public List<Track> Tracks { get; set; } = [];
     }
 
-    public class Track
+    public class Track : FullTrack
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string Artist { get; set; }
         public string Lyrics { get; set; } // Populated by Musixmatch
-        public bool IsHarmful { get; set; } // Set by Azure Content Safety
     }
     public class SpotifyPlaybackInfo
     {
         public FullTrack CurrentlyPlaying { get; set; }
         public List<FullTrack> Queue { get; set; } = new();
+        
+        public List<string> IsFlagged { get; set; } = [];
+        public int? RemaininTimeMs { get; set; }
     }
 
     public class LyricsModerationResult
