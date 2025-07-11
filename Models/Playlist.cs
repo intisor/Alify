@@ -7,20 +7,21 @@ namespace Alify.Models
         public string Id { get; set; }
         public string Name { get; set; }
         public int TrackCount { get; set; }
-        public List<Track> Tracks { get; set; } = [];
+        public List<Track> Tracks { get; set; } = new();
     }
 
-    public class Track : FullTrack
+    public class Track
     {
-        public string Lyrics { get; set; } // Populated by Musixmatch
+        public FullTrack FullTrack { get; set; }
+        public string Lyrics { get; set; }
+        public bool IsFlagged { get; set; }
     }
+
     public class SpotifyPlaybackInfo
     {
-        public FullTrack CurrentlyPlaying { get; set; }
-        public List<FullTrack> Queue { get; set; } = new();
-        
-        public List<string> IsFlagged { get; set; } = [];
-        public int? RemaininTimeMs { get; set; }
+        public Track CurrentlyPlaying { get; set; }
+        public List<Track> Queue { get; set; } = new();
+        public int? RemainingTimeMs { get; set; }
     }
 
     public class LyricsModerationResult

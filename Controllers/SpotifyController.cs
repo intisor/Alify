@@ -1,6 +1,5 @@
 ﻿using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
-using SpotifyAPI.Web;
 
 namespace Alify.Controllers
 {
@@ -8,51 +7,40 @@ namespace Alify.Controllers
     [ApiController]
     public class SpotifyController : ControllerBase
     {
+        private readonly SpotifyQueueMonitorService _monitorService;
         private readonly SpotifyService _spotifyService;
-        private CancellationTokenSource _cts = new();
 
-        public SpotifyController(SpotifyService spotifyService)
+        public SpotifyController(SpotifyQueueMonitorService monitorService, SpotifyService spotifyService)
         {
+            _monitorService = monitorService;
             _spotifyService = spotifyService;
         }
 
-        [HttpPost("monitor-queue")]
-        public async Task<IActionResult> MonitorQueue()
+        [HttpPost("start-monitor")]
+        public IActionResult StartMonitor()
         {
             var spotify = _spotifyService.GetSpotifyClient();
-            if (spotify == null) return StatusCode(500, "Authentication required");
+            if (spotify == null) 
+                return BadRequest("Authentication required. Please login to Spotify first.");
 
-            try
-            {
-                while (!_cts.Token.IsCancellationRequested)
-                {
-                    var playbackInfo = await _spotifyService.GetCurrentPlaybackAsync(spotify);
-                    if(playbackInfo is not null  && playbackInfo.RemaininTimeMs <= 15000)
-                    {
-
-                    }
-                    if (await _spotifyService.SkipIfFlaggedAsync(playbackInfo, spotify) != null)
-                    {
-                        Console.WriteLine("cleaned some stuffs");
-                    }
-                    await Task.Delay(2000, _cts.Token);
-                }
-            }
-            catch (TaskCanceledException) { /* expected */ }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Background monitor failed: " + ex.Message);
-            }
-
-            return Ok("Monitoring started.");
+            _monitorService.StartMonitoring();
+            return Ok("Queue monitoring started successfully.");
         }
 
         [HttpPost("stop-monitor")]
         public IActionResult StopMonitor()
         {
-            _cts.Cancel();
-            _cts = new CancellationTokenSource();
-            return Ok("Monitoring stopped");
+            _monitorService.StopMonitoring();
+            return Ok("Queue monitoring stopped successfully.");
+        }
+
+        [HttpGet("monitor-status")]
+        public IActionResult GetMonitorStatus()
+        {
+            return Ok(new { 
+                IsMonitoring = _monitorService.IsMonitoring,
+                Status = _monitorService.IsMonitoring ? "Running" : "Stopped"
+            });
         }
     }
 }

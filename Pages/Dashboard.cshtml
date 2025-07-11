@@ -3,61 +3,74 @@
 
 <h2>Now Playing</h2>
 
-@if (Model.TrackName != null)
+@if (Model.PlaybackInfo?.CurrentlyPlaying?.FullTrack != null)
 {
-    <div>
-        <p><strong>@Model.TrackName</strong> by @Model.ArtistName</p>
-        <dl>
-            <dt>Lyrics:</dt>
-            <dd><pre>@Model.Lyric</pre></dd>
-        </dl>
-        <img src="@Model.AlbumArtUrl" width="300" />
+    var track = Model.PlaybackInfo.CurrentlyPlaying;
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@track.FullTrack.Name</h5>
+            <p class="card-text">by @track.FullTrack.Artists.FirstOrDefault()?.Name</p>
+            
+            <div class="mb-2">
+                @if (track.IsFlagged)
+                {
+                    <span class="badge bg-warning text-dark">⚠️ Flagged</span>
+                }
+                else
+                {
+                    <span class="badge bg-success">✅ Clean</span>
+                }
+                
+                @if (track.FullTrack.Explicit)
+                {
+                    <span class="badge bg-danger">Explicit</span>
+                }
+                
+                @if (!string.IsNullOrWhiteSpace(track.Lyrics))
+                {
+                    <span class="badge bg-info">Has Lyrics</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary">No Lyrics</span>
+                }
+            </div>
+            
+            @if (!string.IsNullOrWhiteSpace(track.FullTrack.Album.Images.FirstOrDefault()?.Url))
+            {
+                <img src="@track.FullTrack.Album.Images.FirstOrDefault()?.Url" width="200" class="mb-3" />
+            }
+        </div>
     </div>
 }
-else
-{
-    <p>No track currently playing.</p>
-}
-<div>
-    <h3>Queue</h3>
-    @if (Model.PlaybackInfo?.Queue?.Any() == true)
-    {
-        <ul>
-            @foreach (var track in Model.PlaybackInfo.Queue ?? new List<SpotifyAPI.Web.FullTrack>())
+
+<div class="mt-4">
+    <h3>Queue Monitoring</h3>
+    <p>Status: 
+        @if (Model.IsMonitoring)
+        {
+            <span class="text-success"><strong>🟢 Active</strong></span>
+        }
+        else
+        {
+            <span class="text-secondary"><strong>🔴 Stopped</strong></span>
+        }
+    </p>
+    <p class="text-muted">@Model.StatusMessage</p>
+    
+    <div class="btn-group" role="group">
+        <form method="post" class="d-inline">
+            @if (Model.IsMonitoring)
             {
-                <li>@track.Name by @track.Artists[0].Name @(Model.PlaybackInfo.IsFlagged.Contains(track.Uri) ? "(Flagged)" : "")</li>
+                <button type="submit" asp-page-handler="StopMonitor" class="btn btn-danger">Stop Monitoring</button>
             }
-        </ul>
-    }
-    else
-    {
-        <p>Queue is empty.</p>
-    }
+            else
+            {
+                <button type="submit" asp-page-handler="StartMonitor" class="btn btn-success">Start Monitoring</button>
+            }
+        </form>
+        <form method="post" class="d-inline">
+            <button type="submit" asp-page-handler="RefreshData" class="btn btn-outline-primary">🔄 Refresh Data</button>
+        </form>
+    </div>
 </div>
-
-<div>
-    <p>Status: @Model.StatusMessage</p>
-    <form method="post">
-        <button asp-page-handler="StartMonitor">Start Monitoring</button>
-         <button asp-page-handler="StopMonitor">Stop Monitoring</button>
-    </form>
-</div>
-
-@* <script> *@
-@*     async function updateDashboard() { *@
-@*             const data = await response.json(); *@
-@*             // Update Now Playing *@
-@*             const nowPlaying = document.querySelector('h2').nextElementSibling; *@
-@*             nowPlaying.innerHTML = data.currentlyPlaying *@
-@*                 ? `<p><strong>${data.currentlyPlaying.name}</strong> by ${data.currentlyPlaying.artist}</p>` + *@
-@*                   `<dl><dt>Lyrics:</dt><dd><pre>${data.currentLyrics || 'No lyrics available'}</pre></dd></dl>` + *@
-@*                   `<img src="${data.currentlyPlaying.albumArtUrl}" width="300" alt="Album Art" />` *@
-@*                 : `<p>No track currently playing.</p>`; *@
-@*             // Update Queue *@
-@*             const queue = document.querySelector('h3').nextElementSibling; *@
-@*             queue.innerHTML = data.queue?.length *@
-@*                 ? `<ul>${data.queue.map(t => `<li>${t.name} by ${t.artists[0].name}${t.isFlagged ? ' (Flagged)' : ''}</li>`).join('')}</ul>` *@
-@*                 : `<p>Queue is empty.</p>`; *@
-@*     } *@
-@*     setInterval(updateDashboard, 5000); // Poll every 5 seconds *@
-@* </script> *@

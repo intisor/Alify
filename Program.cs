@@ -15,10 +15,20 @@ builder.Services.AddSession(options =>
 });
 builder.Services.AddHttpClient(); // for making HTTP requests (lyrics, AI, etc.)
 builder.Services.AddSingleton<SpotifyService>(); // our main backend logic
-builder.Services.AddHttpClient<LyricService>(); 
+builder.Services.AddHttpClient<LyricService>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ArtistLyricService>();
 builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
+builder.Services.AddMemoryCache();
+
+// Register singleton cache for Spotify API calls (changed from scoped to singleton)
+builder.Services.AddSingleton<SpotifyRequestCache>();
+
+// Register the background service
+builder.Services.AddSingleton<SpotifyQueueMonitorService>();
+builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider => 
+    provider.GetRequiredService<SpotifyQueueMonitorService>());
 
 var app = builder.Build();
 app.UseHttpsRedirection();
