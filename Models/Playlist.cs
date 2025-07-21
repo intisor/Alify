@@ -33,4 +33,20 @@ namespace Alify.Models
         public bool suitable_for_kids { get; set; }
         //public bool IsHarmful => violence || hate || sexual || profanity;
     }
+
+    public class LyricLine
+    {
+        public int LineNumber { get; set; }
+        public string Text { get; set; }
+        public string Artist { get; set; }
+        public string Section { get; set; } // e.g., "Verse 1", "Chorus", "Bridge"
+        public bool IsAnnotation { get; set; }
+    }
+
+    public class LyricMapping
+    {
+        public List<LyricLine> Lines { get; set; } = new();
+        public Dictionary<string, List<int>> ArtistToLineNumbers { get; set; } = new();
+        public Dictionary<string, List<int>> SectionToLineNumbers { get; set; } = new();
+    }
 }

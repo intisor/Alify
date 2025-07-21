@@ -1,12 +1,9 @@
 ﻿using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Web;
-using static System.Net.WebRequestMethods;
 
 namespace Alify.Services
 {

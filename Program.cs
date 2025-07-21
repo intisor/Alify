@@ -1,8 +1,6 @@
 using Alify.Controllers;
 using Alify.Services;
 using SpotifyAPI.Web;
-using System.Net;
-using System.Net.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();

@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Google Drive MCP Server",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"./dist/index.js"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
