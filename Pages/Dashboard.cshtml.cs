@@ -51,12 +51,12 @@ namespace Alify.Pages
 
             if (currentTrackId != null && currentTrackId != lastTrackId)
             {
-                PlaybackInfo = await spotifyService.UpdatePlaybackWithNewSongAsync(spotify);
+                PlaybackInfo = await spotifyService.GetCurrentPlaybackInfoAsync(spotify);
                 _cache.Set("LastTrackId", currentTrackId, TimeSpan.FromMinutes(10));
             }
             else
             {
-                PlaybackInfo = await spotifyService.GetCurrentPlaybackAsync(spotify);
+                PlaybackInfo = await spotifyService.GetCurrentPlaybackInfoAsync(spotify);
             }
 
             if (PlaybackInfo?.CurrentlyPlaying?.FullTrack != null)

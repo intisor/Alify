@@ -2,188 +2,81 @@ using Alify.Models;
 using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Threading.Tasks;
 
 namespace Alify.Pages
 {
+    /// <summary>
+    /// The model for the Lyrics View page. This class is responsible for fetching the necessary data
+    /// and preparing it for rendering in the Razor Page. It acts as a bridge between the services
+    /// (which handle the business logic) and the view (which handles the presentation).
+    /// </summary>
     public class LyricsViewModel : PageModel
     {
-        private readonly ArtistLyricService _artistLyricService;
-        private readonly LyricService _lyricService;
+        // BOOKMARK: Service Dependencies
+        // These services are injected into the page model via dependency injection.
+        // This is a core concept in ASP.NET Core for creating modular and testable applications.
+        private readonly SpotifyService _spotifyService; // For interacting with the Spotify API.
+        private readonly LyricService _lyricService;     // For fetching lyric data.
+        private readonly ArtistLyricService _artistLyricService; // For parsing and structuring lyrics.
 
-        public LyricsViewModel(ArtistLyricService artistLyricService, LyricService lyricService)
+        public LyricsViewModel(SpotifyService spotifyService, LyricService lyricService, ArtistLyricService artistLyricService)
         {
-            _artistLyricService = artistLyricService;
+            _spotifyService = spotifyService;
             _lyricService = lyricService;
+            _artistLyricService = artistLyricService;
         }
 
-        public LyricMapping LyricMapping { get; set; } = new();
-        public List<ChatMessage> ChatMessages { get; set; } = new();
-        public string Artist { get; set; }
-        public string Title { get; set; }
-        public string RawLyrics { get; set; }
-        public bool LyricsFound { get; set; }
+        // BOOKMARK: Page Model Properties
+        // These properties hold the data that will be displayed on the Razor Page.
+        // The view will bind to these properties to render the dynamic content.
 
-        public async Task OnGetAsync(string artist, string title)
+        /// <summary>
+        /// Holds the parsed and structured lyric data.
+        /// </summary>
+        public LyricMapping LyricMapping { get; set; }
+
+        /// <summary>
+        /// The primary artist of the currently playing song. This is used to determine
+        /// which chat bubbles should be aligned to the right (the "main" user).
+        /// </summary>
+        public string MainArtist { get; set; }
+
+        /// <summary>
+        /// The handler for HTTP GET requests to this page. This is where the main logic for the page resides.
+        /// It orchestrates the calls to the various services to build the data model for the view.
+        /// </summary>
+        public async Task<IActionResult> OnGetAsync()
         {
-            Artist = artist;
-            Title = title;
-
-            if (!string.IsNullOrEmpty(artist) && !string.IsNullOrEmpty(title))
+            // Get the current playback state from Spotify.
+            var spotifyClient = await _spotifyService.GetSpotifyClientAsync();
+            if (spotifyClient != null)
             {
-                // Fetch lyrics from the service
-                RawLyrics = await _lyricService.GetLyricsAsync(artist, title);
-                LyricsFound = !string.IsNullOrEmpty(RawLyrics);
-
-                if (LyricsFound)
+                var playbackInfo = await _spotifyService.GetCurrentPlaybackInfoAsync(spotifyClient);
+                if (playbackInfo?.CurrentlyPlaying?.FullTrack != null)
                 {
-                    // Parse lyrics with artist mapping
-                    LyricMapping = _artistLyricService.ParseLyricsWithArtistMapping(RawLyrics);
+                    var track = playbackInfo.CurrentlyPlaying.FullTrack;
                     
-                    // Convert to chat messages
-                    ChatMessages = ConvertLyricsToChat(LyricMapping);
-                }
-            }
-            else
-            {
-                // Demo lyrics for testing
-                var demoLyrics = @"[Verse 1: Rumi]
-I tried to hide but something broke
-I tried to sing, couldn't hit the notes
-The words kept catching in my throat
-I tried to smile, I was suffocating though
-But here with you, I can finally breathe
-You say you're no good, but you're good for me
-I've been hoping to change, now I know we can change
-But I won't if you're not by my side
-
-[Chorus: Rumi]
-Why does it feel right every time I let you in?
-Why does it feel like I can tell you anything?
-All the secrets that keep me in chains, and
-All the damage that might make me dangerous
-You got a dark side, guess you're not the only one
-What if we both tried fighting what we're running from?
-We can't fix it if we never face it
-What if we find a way to escape it?
-
-[Post-Chorus: Rumi]
-We could be free, free
-We can't fix it if we never face it
-Let the past be the past 'til it's weightless
-
-[Verse 2: Jinu]
-Ooh, time goes by, and I lose perspective
-Yeah, hope only hurts, so I just forget it
-But you're breaking through all the dark in me when I thought that nobody could
-And you're waking up all these parts of me that I thought were buried for good";
-
-                Artist = "Demo";
-                Title = "Sample Song";
-                RawLyrics = demoLyrics;
-                LyricsFound = true;
-                LyricMapping = _artistLyricService.ParseLyricsWithArtistMapping(demoLyrics);
-                ChatMessages = ConvertLyricsToChat(LyricMapping);
-            }
-        }
-
-        private List<ChatMessage> ConvertLyricsToChat(LyricMapping mapping)
-        {
-            var messages = new List<ChatMessage>();
-            var currentMessage = new ChatMessage();
-            
-            foreach (var line in mapping.Lines)
-            {
-                // Skip empty lines
-                if (string.IsNullOrWhiteSpace(line.Text))
-                    continue;
-
-                // If this is an annotation line, start a new message
-                if (line.IsAnnotation)
-                {
-                    // Save previous message if it has content
-                    if (!string.IsNullOrEmpty(currentMessage.Content))
+                    // If a track is playing, fetch its lyrics using the track name and primary artist.
+                    var lyrics = await _lyricService.GetLyricsAsync(track.Artists[0].Name, track.Name);
+                    if (!string.IsNullOrEmpty(lyrics))
                     {
-                        messages.Add(currentMessage);
+                        // If lyrics are found, parse them to identify artists and sections.
+                        LyricMapping = _artistLyricService.ParseLyricsWithArtistMapping(lyrics);
+                        // Set the main artist for the view.
+                        MainArtist = track.Artists[0].Name;
                     }
-
-                    // Start new message
-                    currentMessage = new ChatMessage
-                    {
-                        Artist = line.Artist ?? "Unknown",
-                        Section = line.Section ?? "",
-                        StartLineNumber = line.LineNumber,
-                        Content = "",
-                        LineNumbers = new List<int>()
-                    };
-                }
-                else
-                {
-                    // Add lyric content to current message
-                    if (!string.IsNullOrEmpty(currentMessage.Content))
-                    {
-                        currentMessage.Content += "\n";
-                    }
-                    currentMessage.Content += line.Text;
-                    currentMessage.LineNumbers.Add(line.LineNumber);
-                    currentMessage.EndLineNumber = line.LineNumber;
                 }
             }
 
-            // Add the last message if it has content
-            if (!string.IsNullOrEmpty(currentMessage.Content))
+            if (LyricMapping == null)
             {
-                messages.Add(currentMessage);
+                // Handle the case where no song is playing or lyrics couldn't be found.
+                // The view will display a "No lyrics available" message.
             }
 
-            return messages;
-        }
-    }
-
-    public class ChatMessage
-    {
-        public string Artist { get; set; } = "";
-        public string Section { get; set; } = "";
-        public string Content { get; set; } = "";
-        public int StartLineNumber { get; set; }
-        public int EndLineNumber { get; set; }
-        public List<int> LineNumbers { get; set; } = new();
-        public string AvatarColor => GetAvatarColor(Artist);
-        public string InitialLetters => GetInitials(Artist);
-
-        private string GetAvatarColor(string artist)
-        {
-            if (string.IsNullOrEmpty(artist)) return "#005c4b";
-            
-            // WhatsApp-style colors for different artists
-            var colors = new[]
-            {
-                "#005c4b", // WhatsApp green
-                "#7c3aed", // Purple
-                "#dc2626", // Red
-                "#ea580c", // Orange
-                "#0891b2", // Cyan
-                "#059669", // Emerald
-                "#4338ca", // Indigo
-                "#be185d", // Pink
-                "#0f766e", // Teal
-                "#7c2d12"  // Brown
-            };
-            
-            var hash = artist.GetHashCode();
-            return colors[Math.Abs(hash) % colors.Length];
-        }
-
-        private string GetInitials(string artist)
-        {
-            if (string.IsNullOrEmpty(artist)) return "U";
-            
-            var words = artist.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (words.Length == 1)
-            {
-                return words[0].Length >= 2 ? words[0].Substring(0, 2).ToUpper() : words[0].ToUpper();
-            }
-            
-            return string.Join("", words.Take(2).Select(w => w[0])).ToUpper();
+            // Render the Razor Page with the prepared data.
+            return Page();
         }
     }
 }

@@ -1,486 +1,133 @@
 ﻿@page
 @model Alify.Pages.LyricsViewModel
 @{
-    ViewData["Title"] = "Lyrics Chat";
+    ViewData["Title"] = "Lyrics View";
 }
 
-<div class="whatsapp-container">
-    <!-- WhatsApp Header -->
-    <div class="whatsapp-header">
-        <div class="header-content">
-            <div class="back-arrow">
-                <i class="fas fa-arrow-left"></i>
-            </div>
-            <div class="group-avatar">
-                <i class="fas fa-music"></i>
-            </div>
-            <div class="group-info">
-                <div class="group-name">🎵 @Model.Title</div>
-                <div class="group-subtitle">@Model.Artist • @Model.ChatMessages.Count messages</div>
-            </div>
-            <div class="header-actions">
-                <i class="fas fa-video"></i>
-                <i class="fas fa-phone"></i>
-                <i class="fas fa-ellipsis-v"></i>
-            </div>
-        </div>
-    </div>
+<!--
+    BOOKMARK: Lyrics Chat View
+    This Razor view is responsible for rendering the song lyrics in a chat-like interface.
+    It uses the data provided by the LyricsViewModel to dynamically generate the chat bubbles.
+-->
 
-    <!-- Chat Messages Area -->
-    <div class="whatsapp-chat">
-        <div class="chat-background"></div>
-        <div class="messages-container">
-            
-            <!-- Welcome Message -->
-            <div class="system-message">
-                <div class="system-text">
-                    <i class="fas fa-lock"></i>
-                    Messages are secured with end-to-end encryption. 
-                    Only artists in this chat can read them.
-                </div>
-                <div class="date-divider">
-                    <span>Today</span>
-                </div>
-            </div>
-
-            @if (Model.LyricsFound && Model.ChatMessages.Any())
+<div class="lyrics-chat-container">
+    @if (Model.LyricMapping != null)
+    {
+        <!-- 
+            BOOKMARK: Lyric Line Iteration
+            We loop through each line in the parsed LyricMapping.
+            Each line object contains the text, artist, and whether it's an annotation.
+        -->
+        foreach (var line in Model.LyricMapping.Lines)
+        {
+            if (line.IsAnnotation)
             {
-                @for (int i = 0; i < Model.ChatMessages.Count; i++)
-                {
-                    var message = Model.ChatMessages[i];
-                    var isFirstFromArtist = i == 0 || Model.ChatMessages[i-1].Artist != message.Artist;
-                    var isLastFromArtist = i == Model.ChatMessages.Count - 1 || Model.ChatMessages[i+1].Artist != message.Artist;
-                    
-                    <div class="message-group" data-artist="@message.Artist">
-                        @if (isFirstFromArtist)
-                        {
-                            <div class="artist-name">@message.Artist</div>
-                        }
-                        
-                        <div class="message-wrapper @(isLastFromArtist ? "last-from-artist" : "")">
-                            <div class="message-bubble" style="background-color: @message.AvatarColor">
-                                <div class="message-header">
-                                    <span class="section-badge">@message.Section</span>
-                                    <span class="line-range">Lines @message.StartLineNumber-@message.EndLineNumber</span>
-                                </div>
-                                <div class="message-content">
-                                    @foreach (var line in message.Content.Split('\n'))
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(line))
-                                        {
-                                            <div class="lyric-line">@line</div>
-                                        }
-                                    }
-                                </div>
-                                <div class="message-time">
-                                    <span class="time">@DateTime.Now.AddMinutes(-Model.ChatMessages.Count + i).ToString("HH:mm")</span>
-                                    <i class="fas fa-check-double message-status"></i>
-                                </div>
-                            </div>
-                        </div>
+                <!-- 
+                    BOOKMARK: Annotation Display
+                    Annotations (like "[Chorus]") are displayed as centered, styled messages
+                    to represent song structure, similar to system messages in a chat.
+                -->
+                <div class="chat-message chat-message-center">
+                    <div class="chat-bubble chat-bubble-annotation">
+                        @line.Text
                     </div>
-                }
-            }
-            else if (!Model.LyricsFound)
-            {
-                <div class="empty-state">
-                    <div class="empty-icon">🎵</div>
-                    <div class="empty-title">No lyrics found</div>
-                    <div class="empty-subtitle">Try searching for a different song</div>
                 </div>
             }
             else
             {
-                <div class="empty-state">
-                    <div class="empty-icon">💬</div>
-                    <div class="empty-title">Welcome to Lyrics Chat</div>
-                    <div class="empty-subtitle">Search for a song to start the conversation</div>
+                <!-- 
+                    BOOKMARK: Chat Bubble Alignment
+                    This is the core logic for the chat-like appearance.
+                    - If the line's artist is the main artist of the song, the bubble is aligned to the right.
+                    - Otherwise, it's aligned to the left, representing other artists in the "chat".
+                -->
+                var messageClass = !string.IsNullOrEmpty(line.Artist) && line.Artist == Model.MainArtist ? "chat-message-right" : "chat-message-left";
+                <div class="chat-message @messageClass">
+                    <div class="chat-bubble">
+                        @if (!string.IsNullOrEmpty(line.Artist))
+                        {
+                            <!-- Display the artist's name inside the bubble. -->
+                            <div class="chat-artist">@line.Artist</div>
+                        }
+                        <div class="chat-text">@line.Text</div>
+                    </div>
                 </div>
             }
-        </div>
-    </div>
-
-    <!-- WhatsApp Input Area -->
-    <div class="whatsapp-input">
-        <form method="get" class="input-form">
-            <div class="input-container">
-                <div class="attach-button">
-                    <i class="fas fa-paperclip"></i>
-                </div>
-                <div class="text-input-area">
-                    <input type="text" name="artist" class="text-input" placeholder="Artist name..." value="@Model.Artist" />
-                    <input type="text" name="title" class="text-input" placeholder="Song title..." value="@Model.Title" />
-                </div>
-                <button type="submit" class="send-button">
-                    <i class="fas fa-search"></i>
-                </button>
-            </div>
-        </form>
-    </div>
+        }
+    }
+    else
+    {
+        <!-- Fallback message if no lyrics are available. -->
+        <p>No lyrics available for the current song.</p>
+    }
 </div>
 
+<!--
+    BOOKMARK: Styling (CSS)
+    This <style> block contains all the CSS rules to make the HTML look like a chat interface.
+    Keeping the styles in the same file as the HTML makes the component self-contained and easier to understand.
+-->
 <style>
-    body {
-        margin: 0;
-        padding: 0;
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-        overflow: hidden;
+    .lyrics-chat-container {
+        max-width: 800px;
+        margin: auto;
+        padding: 20px;
+        font-family: sans-serif;
     }
 
-    .whatsapp-container {
-        height: 100vh;
+    .chat-message {
         display: flex;
-        flex-direction: column;
-        background: #0a0a0a;
+        margin-bottom: 15px;
     }
 
-    /* Header */
-    .whatsapp-header {
-        background: #2a2f32;
-        color: #ffffff;
-        padding: 8px 16px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        z-index: 100;
+    /* Aligns messages to the left */
+    .chat-message-left {
+        justify-content: flex-start;
     }
 
-    .header-content {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .back-arrow {
-        font-size: 20px;
-        cursor: pointer;
-        color: #8696a0;
-    }
-
-    .group-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #25d366, #128c7e);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 18px;
-    }
-
-    .group-info {
-        flex: 1;
-    }
-
-    .group-name {
-        font-size: 16px;
-        font-weight: 500;
-        color: #e9edef;
-    }
-
-    .group-subtitle {
-        font-size: 13px;
-        color: #8696a0;
-        margin-top: 1px;
-    }
-
-    .header-actions {
-        display: flex;
-        gap: 20px;
-        color: #8696a0;
-        font-size: 20px;
-    }
-
-    .header-actions i {
-        cursor: pointer;
-    }
-
-    /* Chat Area */
-    .whatsapp-chat {
-        flex: 1;
-        position: relative;
-        overflow-y: auto;
-        background: #0b141a;
-    }
-
-    .chat-background {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-image: 
-            radial-gradient(circle at 25% 25%, #1a2a1a 0%, transparent 25%),
-            radial-gradient(circle at 75% 75%, #1a1a2a 0%, transparent 25%);
-        background-size: 60px 60px;
-        opacity: 0.1;
-        pointer-events: none;
-    }
-
-    .messages-container {
-        position: relative;
-        padding: 8px;
-        min-height: 100%;
-        display: flex;
-        flex-direction: column;
-    }
-
-    /* System Messages */
-    .system-message {
-        text-align: center;
-        margin: 20px 0;
-    }
-
-    .system-text {
-        background: rgba(44, 56, 64, 0.9);
-        color: #8696a0;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        display: inline-block;
-        max-width: 80%;
-    }
-
-    .date-divider {
-        margin: 15px 0;
-    }
-
-    .date-divider span {
-        background: rgba(44, 56, 64, 0.9);
-        color: #8696a0;
-        padding: 6px 12px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 500;
-    }
-
-    /* Messages */
-    .message-group {
-        margin-bottom: 2px;
-    }
-
-    .artist-name {
-        color: #25d366;
-        font-size: 13px;
-        font-weight: 500;
-        margin: 8px 0 4px 68px;
-    }
-
-    .message-wrapper {
-        display: flex;
-        align-items: flex-start;
-        margin-bottom: 2px;
-        padding: 0 8px 0 8px;
-    }
-
-    .last-from-artist {
-        margin-bottom: 12px;
-    }
-
-    .message-bubble {
-        max-width: 70%;
-        min-width: 200px;
-        background: #005c4b;
-        border-radius: 8px;
-        padding: 6px 10px 8px 10px;
-        margin-left: 60px;
-        position: relative;
-        color: #e9edef;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
-
-    .message-bubble::before {
-        content: '';
-        position: absolute;
-        left: -8px;
-        top: 0;
-        width: 0;
-        height: 0;
-        border: 8px solid transparent;
-        border-right-color: inherit;
-        border-left: none;
-        border-top: none;
-    }
-
-    .message-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 4px;
-        font-size: 11px;
-    }
-
-    .section-badge {
-        background: rgba(255,255,255,0.15);
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-weight: 500;
-        color: #ffffff;
-    }
-
-    .line-range {
-        color: rgba(255,255,255,0.7);
-        font-size: 10px;
-    }
-
-    .message-content {
-        margin: 6px 0;
-        line-height: 1.4;
-    }
-
-    .lyric-line {
-        margin-bottom: 3px;
-        font-size: 14px;
-        color: #e9edef;
-    }
-
-    .lyric-line:last-child {
-        margin-bottom: 0;
-    }
-
-    .message-time {
-        display: flex;
+    /* Aligns messages to the right */
+    .chat-message-right {
         justify-content: flex-end;
-        align-items: center;
-        margin-top: 4px;
-        gap: 4px;
-        font-size: 11px;
-        color: rgba(255,255,255,0.6);
     }
 
-    .message-status {
-        color: #53bdeb;
-        font-size: 12px;
-    }
-
-    /* Input Area */
-    .whatsapp-input {
-        background: #2a2f32;
-        padding: 8px 16px;
-        border-top: 1px solid #3a4044;
-    }
-
-    .input-form {
-        display: flex;
-        align-items: center;
-    }
-
-    .input-container {
-        display: flex;
-        align-items: center;
-        background: #40454a;
-        border-radius: 24px;
-        flex: 1;
-        padding: 8px 4px 8px 16px;
-    }
-
-    .attach-button {
-        color: #8696a0;
-        font-size: 20px;
-        margin-right: 12px;
-        cursor: pointer;
-    }
-
-    .text-input-area {
-        flex: 1;
-        display: flex;
-        gap: 8px;
-    }
-
-    .text-input {
-        background: transparent;
-        border: none;
-        outline: none;
-        color: #e9edef;
-        font-size: 15px;
-        flex: 1;
-        padding: 8px 0;
-    }
-
-    .text-input::placeholder {
-        color: #8696a0;
-    }
-
-    .send-button {
-        background: #00a884;
-        border: none;
-        border-radius: 50%;
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
+    /* Aligns annotation messages to the center */
+    .chat-message-center {
         justify-content: center;
+    }
+
+    .chat-bubble {
+        max-width: 70%;
+        padding: 10px 15px;
+        border-radius: 20px;
         color: white;
-        font-size: 18px;
-        cursor: pointer;
-        margin-left: 8px;
-        transition: background 0.2s;
     }
 
-    .send-button:hover {
-        background: #008f72;
+    /* Style for bubbles from "other" artists */
+    .chat-message-left .chat-bubble {
+        background-color: #262d31;
     }
 
-    /* Empty States */
-    .empty-state {
+    /* Style for bubbles from the "main" artist (you) */
+    .chat-message-right .chat-bubble {
+        background-color: #056162;
+    }
+    
+    /* Style for annotation bubbles */
+    .chat-bubble-annotation {
+        background-color: #3d3d3d;
+        font-style: italic;
+        font-size: 0.9em;
         text-align: center;
-        padding: 60px 20px;
-        color: #8696a0;
     }
 
-    .empty-icon {
-        font-size: 64px;
-        margin-bottom: 16px;
-        opacity: 0.5;
+    .chat-artist {
+        font-weight: bold;
+        margin-bottom: 5px;
+        font-size: 0.9em;
+        color: #e0e0e0;
     }
 
-    .empty-title {
-        font-size: 20px;
-        font-weight: 500;
-        margin-bottom: 8px;
-        color: #e9edef;
-    }
-
-    .empty-subtitle {
-        font-size: 14px;
-    }
-
-    /* Scrollbar */
-    .whatsapp-chat::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .whatsapp-chat::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .whatsapp-chat::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.2);
-        border-radius: 3px;
-    }
-
-    /* Responsive */
-    @@media (max-width: 768px) {
-        .message-bubble {
-            max-width: 85%;
-            margin-left: 40px;
-        }
-        
-        .artist-name {
-            margin-left: 48px;
-        }
-        
-        .header-actions {
-            gap: 15px;
-            font-size: 18px;
-        }
-        
-        .group-avatar {
-            width: 36px;
-            height: 36px;
-            font-size: 16px;
-        }
+    .chat-text {
+        font-size: 1em;
     }
 </style>
-
-<!-- Font Awesome for icons -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">

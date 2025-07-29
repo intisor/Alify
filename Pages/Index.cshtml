@@ -5,7 +5,54 @@
 }
 
 <div class="text-center">
-    <h1 class="display-4">Welcome to Alify 🎵</h1>
-    <p>Filter your playlists for faith-based listening ✝️</p>
-    <a class="btn btn-primary" href="/Index">Login with Spotify</a>
+    <h1 class="display-4">Welcome to Alify </h1>
+    <p class="lead">Filter your playlists for faith-based listening</p>
+    
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> @Model.ErrorMessage
+        </div>
+    }
+    
+    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+    {
+        <div class="alert alert-success" role="alert">
+            @Model.SuccessMessage
+        </div>
+    }
+    
+    @if (Model.IsAuthenticated)
+    {
+        <div class="card mx-auto" style="max-width: 500px;">
+            <div class="card-body">
+                <h5 class="card-title text-success">✅ Connected to Spotify</h5>
+                <p class="card-text">You're already logged in to Spotify. You can access the dashboard or logout.</p>
+                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                    <a class="btn btn-success" href="/Dashboard">Go to Dashboard</a>
+                    <a class="btn btn-primary" href="/ProductionDemo">Production Demo</a>
+                    <form method="post" asp-page-handler="logout" class="d-inline">
+                        <button type="submit" class="btn btn-outline-secondary">Logout</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card mx-auto" style="max-width: 500px;">
+            <div class="card-body">
+                <h5 class="card-title">Connect to Spotify</h5>
+                <p class="card-text">To use Alify, you need to connect your Spotify account. This allows us to monitor your music and filter inappropriate content.</p>
+                <div class="d-grid">
+                    <a class="btn btn-success btn-lg" asp-page-handler="login">
+                        <i class="fab fa-spotify"></i> Login with Spotify
+                    </a>
+                </div>
+                <small class="text-muted mt-2 d-block">
+                    We only access your currently playing music and queue. Your playlists remain private.
+                </small>
+            </div>
+        </div>
+    }
 </div>

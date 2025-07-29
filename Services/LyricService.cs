@@ -1,18 +1,33 @@
 ﻿using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Web;
 
 namespace Alify.Services
 {
+    /// <summary>
+    /// Service for fetching and moderating song lyrics.
+    /// </summary>
     public class LyricService
     {
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
         private readonly IMemoryCache _cache;
 
+        // Gemini API rate limiting (30 RPM = 1 request every 2 seconds)
+        private static readonly SemaphoreSlim _geminiRateLimiter = new(1, 1);
+        private static DateTime _lastGeminiRequestTime = DateTime.MinValue;
+        private static readonly TimeSpan _geminiRequestInterval = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LyricService"/> class.
+        /// </summary>
+        /// <param name="httpClient">The HTTP client for making requests.</param>
+        /// <param name="configuration">The application configuration for accessing API keys.</param>
+        /// <param name="cache">The memory cache for storing lyrics and moderation results.</param>
         public LyricService(HttpClient httpClient, IConfiguration configuration, IMemoryCache cache)
         {
             _httpClient = httpClient;
@@ -20,68 +35,59 @@ namespace Alify.Services
             _cache = cache;
         }
 
+        /// <summary>
+        /// Gets the lyrics for a song, using a cache to avoid repeated requests.
+        /// </summary>
+        /// <param name="artist">The artist of the song.</param>
+        /// <param name="title">The title of the song.</param>
+        /// <returns>The lyrics of the song, or null if not found.</returns>
         public async Task<string> GetLyricsAsync(string artist, string title)
         {
             var cacheKey = $"lyrics_{artist}_{title}";
-            if (_cache.TryGetValue(cacheKey, out string cachedLyrics))
+            if (_cache.TryGetValue(cacheKey, out string? cachedLyrics))
             {
-                return cachedLyrics;
+                return cachedLyrics!;
             }
 
-            Console.WriteLine($"Fetching lyrics for: {title} by {artist}");
-
-            // Try Genius
             var geniusLyrics = await GetLyricsFromGeniusAsync(title, artist);
 
             if (!string.IsNullOrWhiteSpace(geniusLyrics))
             {
                 _cache.Set(cacheKey, geniusLyrics, TimeSpan.FromHours(24));
-                Console.WriteLine($"Successfully fetched lyrics for: {title} by {artist}");
+                Console.WriteLine($"Lyrics found for: {title} by {artist}");
             }
             else
             {
                 Console.WriteLine($"No lyrics found for: {title} by {artist}");
             }
 
-            return !string.IsNullOrWhiteSpace(geniusLyrics)
-                ? geniusLyrics
-                : null;
+            return geniusLyrics;
         }
 
-        private async Task<string> TryGetLyricsFromOvhAsync(string artist, string title)
-        {
-            var url = $"https://api.lyrics.ovh/v1/{HttpUtility.UrlEncode(artist)}/{HttpUtility.UrlEncode(title)}";
-            var response = await _httpClient.GetAsync(url);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
-                return doc.RootElement.GetProperty("lyrics").GetString();
-            }
-            return null;
-        }
-
-        private async Task<string> GetLyricsFromGeniusAsync(string title, string artist)
+        /// <summary>
+        /// Fetches lyrics from the Genius API.
+        /// </summary>
+        /// <param name="title">The title of the song.</param>
+        /// <param name="artist">The artist of the song.</param>
+        /// <returns>The lyrics of the song, or null if an error occurs.</returns>
+        private async Task<string?> GetLyricsFromGeniusAsync(string title, string artist)
         {
             try
             {
-                var query = HttpUtility.UrlEncode($"{title} {artist}");
                 var geniusKey = _configuration["Genius:token"];
-                
                 if (string.IsNullOrEmpty(geniusKey))
                 {
-                    Console.WriteLine("Genius API token is not configured");
+                    Console.WriteLine("Genius API token is not configured.");
                     return null;
                 }
 
-                var searchUrl = $"https://api.genius.com/search?q={query}";
+                var searchUrl = $"https://api.genius.com/search?q={HttpUtility.UrlEncode($"{title} {artist}")}";
+                
+                using var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
 
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
-
-                var response = await _httpClient.GetAsync(searchUrl);
-                if (!response.IsSuccessStatusCode) 
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
                 {
                     Console.WriteLine($"Genius search failed: {response.StatusCode}");
                     return null;
@@ -90,49 +96,24 @@ namespace Alify.Services
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
 
-                var hits = doc.RootElement.GetProperty("response").GetProperty("hits").EnumerateArray();
-                var hit = hits.FirstOrDefault();
-                
-                if (hit.ValueKind == JsonValueKind.Undefined) 
+                var hit = doc.RootElement.GetProperty("response").GetProperty("hits").EnumerateArray().FirstOrDefault();
+                if (hit.ValueKind == JsonValueKind.Undefined)
                 {
-                    Console.WriteLine("No search results found on Genius");
                     return null;
                 }
 
                 var songUrl = hit.GetProperty("result").GetProperty("url").GetString();
-                if (string.IsNullOrEmpty(songUrl)) 
-                {
-                    Console.WriteLine("No song URL found in Genius results");
-                    return null;
-                }
+                if (string.IsNullOrEmpty(songUrl)) return null;
 
-                Console.WriteLine($"Scraping lyrics from: {songUrl}");
-
-                // Step 2: Scrape lyrics
                 var html = await _httpClient.GetStringAsync(songUrl);
                 var htmlDoc = new HtmlDocument();
                 htmlDoc.LoadHtml(html);
 
                 var lyricsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'Lyrics__Container')]");
-                if (lyricsNode == null) 
-                {
-                    Console.WriteLine("Lyrics container not found on Genius page");
-                    return null;
-                }
+                if (lyricsNode == null) return null;
 
-                // Step 3: Clean lyrics
-                var lyrics = lyricsNode.InnerText;
-                lyrics = HttpUtility.HtmlDecode(lyrics);
-                lyrics = lyrics.Trim();
-
-                if (string.IsNullOrWhiteSpace(lyrics))
-                {
-                    Console.WriteLine("Extracted lyrics are empty");
-                    return null;
-                }
-
-                Console.WriteLine($"Successfully extracted lyrics ({lyrics.Length} characters)");
-                return lyrics;
+                var lyrics = HttpUtility.HtmlDecode(lyricsNode.InnerText).Trim();
+                return string.IsNullOrWhiteSpace(lyrics) ? null : lyrics;
             }
             catch (Exception ex)
             {
@@ -141,96 +122,128 @@ namespace Alify.Services
             }
         }
 
-        public async Task<LyricsModerationResult> ModerateLyricsAsync(string lyrics)
+        /// <summary>
+        /// Moderates lyrics for explicit content using the Gemini API.
+        /// </summary>
+        /// <param name="lyrics">The lyrics to moderate.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/> indicating the content categories, or null if an error occurs.</returns>
+        public async Task<LyricsModerationResult?> ModerateLyricsAsync(string lyrics)
         {
             var cacheKey = $"moderation_{lyrics.GetHashCode()}";
-            if (_cache.TryGetValue(cacheKey, out LyricsModerationResult cachedResult))
+            if (_cache.TryGetValue(cacheKey, out LyricsModerationResult? cachedResult))
             {
                 return cachedResult;
             }
 
             var apiKey = _configuration["Gemini:ApiKey"];
-            if (string.IsNullOrEmpty(apiKey))
+            if (string.IsNullOrEmpty(apiKey) || apiKey.StartsWith("AIza") == false)
             {
-                Console.WriteLine("Gemini API key is not configured");
+                Console.WriteLine("Gemini API key is not configured. Please set it in appsettings.json.");
                 return null;
             }
 
-            var endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-            var url = $"{endpoint}?key={apiKey}";
+            return await ModerateLyricsWithRetryAsync(lyrics, apiKey, cacheKey);
+        }
 
-            var prompt = new
+        /// <summary>
+        /// Moderates lyrics with a retry mechanism and rate limiting.
+        /// </summary>
+        /// <param name="lyrics">The lyrics to moderate.</param>
+        /// <param name="apiKey">The Gemini API key.</param>
+        /// <param name="cacheKey">The cache key for storing the result.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/>, or null if the request fails.</returns>
+        private async Task<LyricsModerationResult?> ModerateLyricsWithRetryAsync(string lyrics, string apiKey, string cacheKey)
+        {
+            const int maxRetries = 3;
+            var endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+            var prompt = new { contents = new[] { new { parts = new[] { new { text = $"Return only valid JSON like:\n{{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }}\n\nLyrics:\n{lyrics}" } }, role = "user" } } };
+            var requestJson = JsonSerializer.Serialize(prompt);
+
+            for (var attempt = 1; attempt <= maxRetries; attempt++)
             {
-                contents = new[]
+                await _geminiRateLimiter.WaitAsync();
+                try
                 {
-                    new 
+                    var timeSinceLastRequest = DateTime.UtcNow - _lastGeminiRequestTime;
+                    if (timeSinceLastRequest < _geminiRequestInterval)
                     {
-                        parts = new[] 
+                        await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
+                    }
+
+                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                    var requestBody = new StringContent(requestJson, Encoding.UTF8, "application/json");
+                    var response = await client.PostAsync($"{endpoint}?key={apiKey}", requestBody);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var responseString = await response.Content.ReadAsStringAsync();
+                        var result = ParseGeminiResponse(responseString);
+                        if (result != null)
                         {
-                            new 
-                            {
-                                text = $"Return only valid JSON like:\n" +
-                                    "{{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }}\n\n" +
-                                    $"Lyrics:\n{lyrics}"
-                            }
-                        },
-                        role = "user"
+                            _cache.Set(cacheKey, result, TimeSpan.FromHours(24));
+                            Console.WriteLine($"Gemini moderation successful (attempt {attempt})");
+                        }
+                        return result;
+                    }
+
+                    if (!IsRetryable(response.StatusCode) || attempt == maxRetries)
+                    {
+                        Console.WriteLine($"Gemini API request failed with status {response.StatusCode}. Not retrying.");
+                        return null;
                     }
                 }
-            };
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during lyrics moderation (attempt {attempt}): {ex.Message}");
+                    if (attempt == maxRetries) return null;
+                }
+                finally
+                {
+                    _lastGeminiRequestTime = DateTime.UtcNow;
+                    _geminiRateLimiter.Release();
+                }
 
+                if (attempt < maxRetries)
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                    Console.WriteLine($"Waiting {delay.TotalSeconds}s before retry...");
+                    await Task.Delay(delay);
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Determines if an HTTP status code is retryable.
+        /// </summary>
+        /// <param name="statusCode">The HTTP status code.</param>
+        /// <returns>True if the status code indicates a transient error, false otherwise.</returns>
+        private static bool IsRetryable(HttpStatusCode statusCode) =>
+            statusCode is HttpStatusCode.ServiceUnavailable or HttpStatusCode.TooManyRequests or >= HttpStatusCode.InternalServerError;
+
+        /// <summary>
+        /// Parses the JSON response from the Gemini API.
+        /// </summary>
+        /// <param name="responseString">The JSON response string.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
+        private static LyricsModerationResult? ParseGeminiResponse(string responseString)
+        {
             try
             {
-                var requestJson = JsonSerializer.Serialize(prompt);
-                var requestBody = new StringContent(requestJson, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(url, requestBody);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"Gemini API error: {response.StatusCode} - {errorContent}");
-                    return null;
-                }
-
-                var responseString = await response.Content.ReadAsStringAsync();
-                if (string.IsNullOrEmpty(responseString))
-                {
-                    Console.WriteLine("Empty response from Gemini API");
-                    return null;
-                }
-
                 using var doc = JsonDocument.Parse(responseString);
-                var textResponse = doc
-                    .RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text")
-                    .GetString();
+                var textResponse = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
 
                 var jsonStart = textResponse?.IndexOf('{') ?? -1;
                 var jsonEnd = textResponse?.LastIndexOf('}') ?? -1;
 
-                if (jsonStart == -1 || jsonEnd == -1 || jsonEnd <= jsonStart)
-                {
-                    Console.WriteLine($"Could not extract clean JSON block from: {textResponse}");
-                    return null;
-                }
+                if (jsonStart == -1 || jsonEnd == -1) return null;
 
                 var cleanJson = textResponse.Substring(jsonStart, jsonEnd - jsonStart + 1);
-                Console.WriteLine($"Extracted JSON: {cleanJson}");
-
-                var result = JsonSerializer.Deserialize<LyricsModerationResult>(cleanJson);
-                if (result != null)
-                {
-                    _cache.Set(cacheKey, result, TimeSpan.FromHours(24));
-                    Console.WriteLine($"Moderation result - Violence: {result.violence}, Hate: {result.hate}, Profanity: {result.profanity}, Sexual: {result.sexual}, Suitable for kids: {result.suitable_for_kids}");
-                }
-                return result;
+                return JsonSerializer.Deserialize<LyricsModerationResult>(cleanJson);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error during lyrics moderation: {ex.Message}");
+                Console.WriteLine($"Failed to parse Gemini response: {ex.Message}");
                 return null;
             }
         }

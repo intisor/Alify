@@ -1,19 +1,40 @@
 ﻿using Alify.Models;
-using Alify.Services;
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Alify.Services;
 
+/// <summary>
+/// Service for interacting with the Spotify API.
+/// Handles authentication, playback control, and data fetching.
+/// </summary>
 public class SpotifyService
 {
+    // Dependencies injected through the constructor
     private readonly IConfiguration _config;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly LyricService _lyricService;
     private readonly IMemoryCache _cache;
     private readonly SpotifyRequestCache _requestCache;
-    private SpotifyClient _spotifyClient;
-    private AuthorizationCodeAuthenticator _authenticator;
 
-    public SpotifyService(IConfiguration config, IHttpContextAccessor httpContextAccessor, LyricService lyricService, IMemoryCache cache, SpotifyRequestCache requestCache)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SpotifyService"/> class.
+    /// </summary>
+    /// <param name="config">The application configuration for accessing API keys and settings.</param>
+    /// <param name="httpContextAccessor">Accessor for the current HTTP context to manage user-specific session data.</param>
+    /// <param name="lyricService">Service for fetching and moderating lyrics from external APIs.</param>
+    /// <param name="cache">In-memory cache for storing data to reduce API calls and improve performance.</param>
+    /// <param name="requestCache">Specialized cache for Spotify API requests to avoid rate limiting.</param>
+    public SpotifyService(
+        IConfiguration config,
+        IHttpContextAccessor httpContextAccessor,
+        LyricService lyricService,
+        IMemoryCache cache,
+        SpotifyRequestCache requestCache)
     {
         _config = config;
         _httpContextAccessor = httpContextAccessor;
@@ -22,90 +43,214 @@ public class SpotifyService
         _requestCache = requestCache;
     }
 
-    public async Task<string> StartAuthAsync()
-    {
-        string clientId = _config["Spotify:ClientId"]!;
-        string redirectUri = _config["Spotify:RedirectUri"]!;
+    /// <summary>
+    /// Gets the current user's session to store authentication tokens and state.
+    /// </summary>
+    /// <remarks>
+    /// Using the session allows maintaining user-specific Spotify authentication 
+    /// without requiring a database, but tokens will be lost if the session expires.
+    /// </remarks>
+    private ISession Session => _httpContextAccessor.HttpContext!.Session;
 
-        var loginRequest = new LoginRequest(
-            new Uri(redirectUri),
-            clientId,
-            LoginRequest.ResponseType.Code
-        )
+    /// <summary>
+    /// Starts the Spotify authentication process by generating a login URL.
+    /// </summary>
+    /// <returns>The Spotify login URL that the user should be redirected to.</returns>
+    /// <remarks>
+    /// This initiates the OAuth 2.0 Authorization Code Flow which is recommended for 
+    /// long-running applications where a user logs in once and the app maintains access.
+    /// </remarks>
+    public string StartAuth()
+    {
+        // Get configuration values from appsettings.json or user secrets
+        var clientId = _config["Spotify:ClientId"]!;
+        var redirectUri = _config["Spotify:RedirectUri"]!;
+        
+        // Generate a unique state to prevent CSRF attacks
+        // This is a security measure required by the OAuth 2.0 spec
+        var state = Guid.NewGuid().ToString();
+        Session.SetString("SpotifyState", state);
+
+        // Create the authorization request with the necessary scopes
+        // Scopes determine what actions the app is allowed to perform on behalf of the user
+        var loginRequest = new LoginRequest(new Uri(redirectUri), clientId, LoginRequest.ResponseType.Code)
         {
-            Scope = [Scopes.UserReadCurrentlyPlaying, Scopes.UserReadPlaybackState, Scopes.UserModifyPlaybackState]
-        };
-
-        // Use Task.FromResult to return a completed task with the result
-        return await Task.FromResult(loginRequest.ToUri().ToString());
-    }
-
-    public async Task UpdateAuthAsync(string code)
-    {
-        var tokenResponse = await new OAuthClient().RequestToken(
-            new AuthorizationCodeTokenRequest(
-                _config["Spotify:ClientId"]!,
-                _config["Spotify:ClientSecret"]!,
-                code,
-                new Uri(_config["Spotify:RedirectUri"]!)
-            )
-        );
-        _authenticator = new AuthorizationCodeAuthenticator(_config["Spotify:ClientId"]!, _config["Spotify:ClientSecret"]!, tokenResponse);
-        _spotifyClient = new SpotifyClient(SpotifyClientConfig.CreateDefault().WithAuthenticator(_authenticator));
-        _httpContextAccessor.HttpContext!.Session.SetString("SpotifyAccessToken", tokenResponse.AccessToken);
-    }
-
-    public SpotifyClient GetSpotifyClient()
-    {
-        if (_spotifyClient == null)
-        {
-            var sessionToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
-            if (string.IsNullOrEmpty(sessionToken))
+            Scope = new[]
             {
-                Console.WriteLine("No Spotify access token found. Authentication required.");
-                return null;
-            }
-            _spotifyClient = new SpotifyClient(SpotifyClientConfig.CreateDefault().WithToken(sessionToken));
-        }
-        return _spotifyClient;
+                Scopes.UserReadCurrentlyPlaying,    // Allows reading the currently playing track
+                Scopes.UserReadPlaybackState,       // Allows reading the playback state (volume, repeat, etc.)
+                Scopes.UserModifyPlaybackState,     // Allows controlling playback (play, pause, skip, etc.)
+                Scopes.PlaylistModifyPrivate,       // Allows modifying private playlists
+                Scopes.PlaylistModifyPublic         // Allows modifying public playlists
+            },
+            State = state
+        };
+        return loginRequest.ToUri().ToString();
     }
 
+    /// <summary>
+    /// Handles the callback from Spotify after user authorization, exchanging the authorization code for an access token.
+    /// </summary>
+    /// <param name="code">The authorization code from Spotify.</param>
+    /// <param name="state">The state parameter for CSRF protection.</param>
+    /// <returns>True if authentication was successful, otherwise false.</returns>
+    /// <remarks>
+    /// This is called when the user is redirected back from Spotify's authorization page.
+    /// It verifies the state parameter to prevent CSRF attacks and exchanges the authorization code for tokens.
+    /// </remarks>
+    public async Task<bool> UpdateAuthAsync(string code, string state)
+    {
+        // Verify state to prevent cross-site request forgery attacks
+        var storedState = Session.GetString("SpotifyState");
+        if (string.IsNullOrEmpty(storedState) || state != storedState)
+        {
+            return false;
+        }
+
+        // State is only used once, so remove it from session
+        Session.Remove("SpotifyState");
+
+        // Exchange the authorization code for access and refresh tokens
+        var tokenResponse = await new OAuthClient().RequestToken(new AuthorizationCodeTokenRequest(
+            _config["Spotify:ClientId"]!,
+            _config["Spotify:ClientSecret"]!,
+            code,
+            new Uri(_config["Spotify:RedirectUri"]!)
+        ));
+
+        // Store tokens and expiry date in the session for future use
+        // The access token is short-lived (1 hour) while the refresh token is long-lived
+        Session.SetString("SpotifyAccessToken", tokenResponse.AccessToken);
+        Session.SetString("SpotifyRefreshToken", tokenResponse.RefreshToken ?? "");
+        Session.SetString("SpotifyTokenExpiry", DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn).ToString("o"));
+        return true;
+    }
+
+    /// <summary>
+    /// Gets a SpotifyClient instance for making API calls. Refreshes the access token if it's expired.
+    /// </summary>
+    /// <returns>A configured SpotifyClient, or null if authentication fails.</returns>
+    /// <remarks>
+    /// This is the main entry point for making Spotify API calls. It handles token refresh
+    /// automatically so other methods don't need to worry about authentication details.
+    /// </remarks>
+    public async Task<SpotifyClient?> GetSpotifyClientAsync()
+    {
+        var accessToken = Session.GetString("SpotifyAccessToken");
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return null;
+        }
+
+        // Refresh the token if it's about to expire (within 5 minutes)
+        // This proactive approach prevents API calls from failing due to token expiration
+        if (IsTokenExpired() && !await RefreshTokenAsync())
+        {
+            return null;
+        }
+
+        // Get the potentially refreshed access token
+        accessToken = Session.GetString("SpotifyAccessToken");
+        return new SpotifyClient(accessToken!);
+    }
+
+    /// <summary>
+    /// Checks if the current access token is expired or close to expiring.
+    /// </summary>
+    /// <returns>True if the token is expired or will expire within 5 minutes, otherwise false.</returns>
+    /// <remarks>
+    /// We check for expiration 5 minutes in advance to avoid edge cases where the token
+    /// expires while making a request or between closely-timed requests.
+    /// </remarks>
+    private bool IsTokenExpired()
+    {
+        var tokenExpiryStr = Session.GetString("SpotifyTokenExpiry");
+        // Check if the token expires within the next 5 minutes
+        return DateTime.TryParse(tokenExpiryStr, out var tokenExpiry) && tokenExpiry <= DateTime.UtcNow.AddMinutes(5);
+    }
+
+    /// <summary>
+    /// Refreshes the Spotify access token using the refresh token.
+    /// </summary>
+    /// <returns>True if the token was refreshed successfully, otherwise false.</returns>
+    /// <remarks>
+    /// The OAuth 2.0 flow allows refreshing an expired access token without requiring the user to log in again.
+    /// This method is called automatically by GetSpotifyClientAsync when needed.
+    /// </remarks>
+    private async Task<bool> RefreshTokenAsync()
+    {
+        var refreshToken = Session.GetString("SpotifyRefreshToken");
+        if (string.IsNullOrEmpty(refreshToken))
+        {
+            return false;
+        }
+
+        // Request a new access token using the refresh token
+        var newResponse = await new OAuthClient().RequestToken(new AuthorizationCodeRefreshRequest(
+            _config["Spotify:ClientId"]!,
+            _config["Spotify:ClientSecret"]!,
+            refreshToken
+        ));
+
+        // Update the session with the new tokens
+        Session.SetString("SpotifyAccessToken", newResponse.AccessToken);
+        Session.SetString("SpotifyTokenExpiry", DateTime.UtcNow.AddSeconds(newResponse.ExpiresIn).ToString("o"));
+        
+        // A new refresh token might be issued, so we update it if available
+        // This is not always provided but should be saved when it is
+        if (!string.IsNullOrEmpty(newResponse.RefreshToken))
+        {
+            Session.SetString("SpotifyRefreshToken", newResponse.RefreshToken);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Checks if the user is currently authenticated with Spotify.
+    /// </summary>
+    /// <returns>True if an access token exists in the session, otherwise false.</returns>
+    /// <remarks>
+    /// Used to determine if the UI should show login options or authorized user features.
+    /// </remarks>
+    public bool IsAuthenticated() => !string.IsNullOrEmpty(Session.GetString("SpotifyAccessToken"));
+
+    /// <summary>
+    /// Clears all Spotify authentication data from the session.
+    /// </summary>
+    /// <remarks>
+    /// Used for logging out or when authentication has failed irreparably.
+    /// </remarks>
+    public void ClearAuthentication()
+    {
+        Session.Remove("SpotifyAccessToken");
+        Session.Remove("SpotifyRefreshToken");
+        Session.Remove("SpotifyTokenExpiry");
+        Session.Remove("SpotifyState");
+    }
+
+    /// <summary>
+    /// Creates a custom Track object from a Spotify FullTrack, enriching it with lyrics and moderation info.
+    /// </summary>
+    /// <param name="fullTrack">The FullTrack object from the Spotify API.</param>
+    /// <returns>A custom Track object with additional data.</returns>
+    /// <remarks>
+    /// This method enhances the basic track data from Spotify with lyrics and content moderation
+    /// information, which is used for the content filtering feature of the application.
+    /// </remarks>
     private async Task<Track> CreateTrackFromFullTrackAsync(FullTrack fullTrack)
     {
-        string lyrics = null;
+        // Extract the primary artist name for lyrics lookup
+        var artistName = fullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
         
-        // Check if artists collection is not null and has at least one artist
-        if (fullTrack.Artists != null && fullTrack.Artists.Count > 0)
-        {
-            lyrics = await _lyricService.GetLyricsAsync(fullTrack.Artists[0].Name, fullTrack.Name);
-        }
+        // Fetch lyrics from Genius API through the LyricService
+        var lyrics = await _lyricService.GetLyricsAsync(artistName, fullTrack.Name);
         
-        var isFlagged = false;
-        var flagReason = "";
+        // Only moderate lyrics if they were found
+        var moderation = string.IsNullOrEmpty(lyrics) ? null : await _lyricService.ModerateLyricsAsync(lyrics);
 
-        // First check if the track is marked as explicit by Spotify
-        if (fullTrack.Explicit)
-        {
-            isFlagged = true;
-            flagReason = "Explicit content marker";
-        }
-
-        // Then check lyrics if available
-        if (!string.IsNullOrWhiteSpace(lyrics))
-        {
-            var moderation = await _lyricService.ModerateLyricsAsync(lyrics);
-            if (moderation != null && !moderation.suitable_for_kids)
-            {
-                isFlagged = true;
-                flagReason = isFlagged ? flagReason + " + Lyrics content" : "Lyrics content";
-            }
-        }
-
-        // Log flagging for debugging
-        if (isFlagged)
-        {
-            Console.WriteLine($"Track flagged: {fullTrack.Name} by {fullTrack.Artists[0].Name} - Reason: {flagReason}");
-        }
+        // A track is flagged if it's explicitly marked by Spotify or if the lyrics are deemed inappropriate
+        // This determination is used by the content filtering system
+        var isFlagged = fullTrack.Explicit || (moderation != null && !moderation.suitable_for_kids);
 
         return new Track
         {
@@ -115,163 +260,84 @@ public class SpotifyService
         };
     }
 
-    private string GetUserSpecificCacheKey(string baseKey)
+    /// <summary>
+    /// Gets the current playback information, including the currently playing track and the queue.
+    /// Uses caching to avoid excessive API calls.
+    /// </summary>
+    /// <param name="spotify">The SpotifyClient instance.</param>
+    /// <returns>A SpotifyPlaybackInfo object, or null if no track is playing.</returns>
+    /// <remarks>
+    /// This method is the central point for getting playback information and is used by 
+    /// both the UI components and the background monitoring service.
+    /// </remarks>
+    public async Task<SpotifyPlaybackInfo?> GetCurrentPlaybackInfoAsync(SpotifyClient spotify)
     {
-        var userId = _httpContextAccessor.HttpContext?.Session.Id ?? "anonymous";
-        return $"{baseKey}_{userId}";
-    }
-
-    public async Task<SpotifyPlaybackInfo> GetCurrentPlaybackAsync(SpotifyClient spotify)
-    {
+        // Create a user-specific cache key to prevent session data mixing
         var cacheKey = GetUserSpecificCacheKey("PlaybackInfo");
-        if (_cache.TryGetValue(cacheKey, out SpotifyPlaybackInfo playbackInfo))
+        
+        // Check if playback info is already cached
+        // This reduces API calls when multiple components request the same data
+        if (_cache.TryGetValue(cacheKey, out SpotifyPlaybackInfo? playbackInfo))
         {
             return playbackInfo;
         }
 
-        playbackInfo = new SpotifyPlaybackInfo();
+        // Get the currently playing track using the request cache
+        // The request cache adds another layer of caching at the API call level
         var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
-        if (currentlyPlayingResponse?.Item is FullTrack currentFullTrack)
-        {
-            playbackInfo.CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentFullTrack);
-            playbackInfo.RemainingTimeMs = currentFullTrack.DurationMs - currentlyPlayingResponse.ProgressMs;
-        }
+        if (currentlyPlayingResponse?.Item is not FullTrack currentTrack) return null;
 
-        try
-        {
-            var queueResponse = await _requestCache.GetQueueAsync(spotify);
-            if (queueResponse?.Queue != null)
-            {
-                var queueTasks = queueResponse.Queue.OfType<FullTrack>().Select(CreateTrackFromFullTrackAsync);
-                playbackInfo.Queue = [.. (await Task.WhenAll(queueTasks))];
-            }
-        }
-        catch (APIException ex) { Console.WriteLine($"Queue not available: {ex.Message}"); }
+        // Get the upcoming tracks in the queue
+        var queueResponse = await _requestCache.GetQueueAsync(spotify);
+        
+        // Process each track in the queue to add lyrics and moderation info
+        var queueTasks = queueResponse?.Queue.OfType<FullTrack>().Select(CreateTrackFromFullTrackAsync) ?? Enumerable.Empty<Task<Track>>();
 
-        _cache.Set(cacheKey, playbackInfo, TimeSpan.FromMinutes(10));
+        // Build the complete playback info object
+        playbackInfo = new SpotifyPlaybackInfo
+        {
+            CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentTrack),
+            RemainingTimeMs = currentTrack.DurationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
+            Queue = (await Task.WhenAll(queueTasks)).ToList()
+        };
+
+        // Cache the playback info for a short duration to balance freshness with performance
+        _cache.Set(cacheKey, playbackInfo, TimeSpan.FromSeconds(10));
         return playbackInfo;
     }
 
-    public async Task<SpotifyPlaybackInfo> UpdatePlaybackWithNewSongAsync(SpotifyClient spotify)
+    /// <summary>
+    /// Skips the currently playing track if it is flagged as explicit or inappropriate.
+    /// </summary>
+    /// <param name="spotify">The SpotifyClient instance.</param>
+    /// <remarks>
+    /// This method is used by the SpotifyQueueMonitorService to automatically skip
+    /// inappropriate content, implementing the parental control feature.
+    /// </remarks>
+    public async Task SkipIfFlaggedAsync(SpotifyClient spotify)
     {
-        var cacheKey = GetUserSpecificCacheKey("PlaybackInfo");
-        var existingPlaybackInfo = _cache.Get<SpotifyPlaybackInfo>(cacheKey);
-        if (existingPlaybackInfo == null)
+        var playbackInfo = await GetCurrentPlaybackInfoAsync(spotify);
+        if (playbackInfo?.CurrentlyPlaying?.IsFlagged == true)
         {
-            return await GetCurrentPlaybackAsync(spotify);
+            // Skip to the next track if the current one is flagged
+            await spotify.Player.SkipNext();
+            
+            // Clear the cache to force a refresh of playback info after skipping
+            _requestCache.ClearCache();
         }
-
-        var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
-        if (currentlyPlayingResponse?.Item is FullTrack currentFullTrack)
-        {
-            if (existingPlaybackInfo.CurrentlyPlaying?.FullTrack?.Id != currentFullTrack.Id)
-            {
-                // Clear request cache when song changes to ensure fresh queue data
-                _requestCache.ClearCache();
-                
-                var trackInQueue = existingPlaybackInfo.Queue.FirstOrDefault(t => t.FullTrack.Id == currentFullTrack.Id);
-                if (trackInQueue != null)
-                {
-                    existingPlaybackInfo.CurrentlyPlaying = trackInQueue;
-                    existingPlaybackInfo.Queue.Remove(trackInQueue);
-                }
-                else
-                {
-                    existingPlaybackInfo.CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentFullTrack);
-                }
-            }
-            existingPlaybackInfo.RemainingTimeMs = currentFullTrack.DurationMs - currentlyPlayingResponse.ProgressMs;
-        }
-
-        try
-        {
-            var queueResponse = await _requestCache.GetQueueAsync(spotify);
-            if (queueResponse?.Queue != null)
-            {
-                // Replace the entire queue with fresh data from Spotify instead of just adding new tracks
-                var freshQueueTracks = queueResponse.Queue.OfType<FullTrack>().ToList();
-                var freshQueueTasks = freshQueueTracks.Select(CreateTrackFromFullTrackAsync);
-                var freshlyFetchedTracks = await Task.WhenAll(freshQueueTasks);
-                existingPlaybackInfo.Queue = freshlyFetchedTracks.ToList();
-            }
-        }
-        catch (APIException ex) { Console.WriteLine($"Queue not available: {ex.Message}"); }
-
-        _cache.Set(cacheKey, existingPlaybackInfo, TimeSpan.FromMinutes(10));
-        return existingPlaybackInfo;
     }
 
-    public async Task<FullTrack> SkipIfFlaggedAsync(SpotifyPlaybackInfo playbackInfo, SpotifyClient spotify)
+    /// <summary>
+    /// Creates a user-specific cache key using the session ID.
+    /// </summary>
+    /// <param name="baseKey">The base key for the cache entry.</param>
+    /// <returns>A unique cache key for the current user.</returns>
+    /// <remarks>
+    /// This ensures that cached data is specific to each user session and prevents
+    /// data leakage between different users of the application.
+    /// </remarks>
+    private string GetUserSpecificCacheKey(string baseKey)
     {
-        var nextTrack = playbackInfo.Queue?.FirstOrDefault();
-        if (nextTrack == null || !nextTrack.IsFlagged) return null;
-
-        await spotify.Player.SkipNext(new PlayerSkipNextRequest());
-        
-        var artistName = nextTrack.FullTrack.Artists != null && nextTrack.FullTrack.Artists.Count > 0 
-            ? nextTrack.FullTrack.Artists[0].Name 
-            : "Unknown Artist";
-        
-        Console.WriteLine($"Skipped flagged track: {nextTrack.FullTrack.Name} by {artistName}");
-        return nextTrack.FullTrack;
-    }
-
-    public async Task<bool> SkipCurrentTrackIfFlaggedAsync(SpotifyClient spotify)
-    {
-        try
-        {
-            var currentlyPlaying = await _requestCache.GetCurrentlyPlayingAsync(spotify);
-            if (currentlyPlaying?.Item is FullTrack track)
-            {
-                var trackInfo = await CreateTrackFromFullTrackAsync(track);
-                if (trackInfo.IsFlagged)
-                {
-                    await spotify.Player.SkipNext(new PlayerSkipNextRequest());
-                    Console.WriteLine($"Skipped flagged current track: {track.Name} by {track.Artists[0].Name}");
-                    return true;
-                }
-            }
-        }
-        catch (APIException ex)
-        {
-            Console.WriteLine($"API error while checking current track: {ex.Message}");
-        }
-        return false;
-    }
-
-    public async Task<SpotifyPlaybackInfo> GetCurrentPlaybackInfoAsync(SpotifyClient spotify)
-    {
-        try
-        {
-            var currentlyPlaying = await _requestCache.GetCurrentlyPlayingAsync(spotify);
-            if (currentlyPlaying?.Item is not FullTrack currentTrack) return null;
-
-            var playbackInfo = new SpotifyPlaybackInfo
-            {
-                CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentTrack),
-                RemainingTimeMs = currentTrack.DurationMs - currentlyPlaying.ProgressMs
-            };
-
-            try
-            {
-                var queue = await _requestCache.GetQueueAsync(spotify);
-                if (queue?.Queue != null)
-                {
-                    var queueTasks = queue.Queue.OfType<FullTrack>().Select(CreateTrackFromFullTrackAsync);
-                    playbackInfo.Queue = (await Task.WhenAll(queueTasks)).ToList();
-                }
-            }
-            catch (APIException ex)
-            {
-                Console.WriteLine($"Queue not available: {ex.Message}");
-            }
-
-            return playbackInfo;
-        }
-        catch (APIException ex)
-        {
-            Console.WriteLine($"Error getting playback info: {ex.Message}");
-            return null;
-        }
+        return $"{baseKey}_{Session.Id}";
     }
 }

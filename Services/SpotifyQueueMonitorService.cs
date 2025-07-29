@@ -1,5 +1,11 @@
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Alify.Services
 {
@@ -8,10 +14,12 @@ namespace Alify.Services
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<SpotifyQueueMonitorService> _logger;
         private readonly IMemoryCache _cache;
-        private bool _isMonitoring = false;
+        private bool _isMonitoring;
+        private DateTime _lastAuthWarning = DateTime.MinValue;
+        private readonly TimeSpan _authWarningCooldown = TimeSpan.FromMinutes(5);
 
         public SpotifyQueueMonitorService(
-            IServiceProvider serviceProvider, 
+            IServiceProvider serviceProvider,
             ILogger<SpotifyQueueMonitorService> logger,
             IMemoryCache cache)
         {
@@ -20,101 +28,53 @@ namespace Alify.Services
             _cache = cache;
         }
 
-        public void StartMonitoring()
-        {
-            _isMonitoring = true;
-            _cache.Set("MonitoringStatus", "Running", TimeSpan.FromHours(1));
-            _logger.LogInformation("Spotify queue monitoring started");
-        }
-
-        public void StopMonitoring()
-        {
-            _isMonitoring = false;
-            _cache.Set("MonitoringStatus", "Stopped", TimeSpan.FromHours(1));
-            _logger.LogInformation("Spotify queue monitoring stopped");
-        }
-
+        public void StartMonitoring() => SetMonitoringStatus(true);
+        public void StopMonitoring() => SetMonitoringStatus(false);
         public bool IsMonitoring => _isMonitoring;
+
+        private void SetMonitoringStatus(bool isRunning)
+        {
+            _isMonitoring = isRunning;
+            _cache.Set("MonitoringStatus", isRunning ? "Running" : "Stopped", TimeSpan.FromHours(1));
+            _logger.LogInformation($"Spotify queue monitoring {(isRunning ? "started" : "stopped")}");
+        }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Spotify Queue Monitor Service started");
-
+            _logger.LogInformation("Spotify Queue Monitor Service started.");
             while (!stoppingToken.IsCancellationRequested)
             {
                 if (_isMonitoring)
                 {
-                    try
-                    {
-                        using var scope = _serviceProvider.CreateScope();
-                        var spotifyService = scope.ServiceProvider.GetRequiredService<SpotifyService>();
-                        var requestCache = scope.ServiceProvider.GetRequiredService<SpotifyRequestCache>();
-                        
-                        var spotify = spotifyService.GetSpotifyClient();
-                        if (spotify != null)
-                        {
-                            await MonitorAndSkipFlaggedTracksAsync(spotifyService, spotify, requestCache);
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Spotify client not available - authentication may be required");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error occurred while monitoring Spotify queue");
-                    }
+                    await CheckQueueAsync();
                 }
-
                 await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
             }
-
-            _logger.LogInformation("Spotify Queue Monitor Service stopped");
+            _logger.LogInformation("Spotify Queue Monitor Service stopped.");
         }
 
-        private async Task MonitorAndSkipFlaggedTracksAsync(SpotifyService spotifyService, SpotifyClient spotify, SpotifyRequestCache requestCache)
+        private async Task CheckQueueAsync()
         {
             try
             {
-                var playbackInfo = await spotifyService.GetCurrentPlaybackInfoAsync(spotify);
-                if (playbackInfo == null) return;
+                using var scope = _serviceProvider.CreateScope();
+                var spotifyService = scope.ServiceProvider.GetRequiredService<SpotifyService>();
+                var spotify = await spotifyService.GetSpotifyClientAsync();
 
-                // Check if current track is flagged and skip if necessary
-                if (playbackInfo.CurrentlyPlaying?.IsFlagged == true)
+                if (spotify != null)
                 {
-                    await spotify.Player.SkipNext(new PlayerSkipNextRequest());
-                    _logger.LogInformation("Skipped flagged current track: {TrackName} by {ArtistName}",
-                        playbackInfo.CurrentlyPlaying.FullTrack.Name,
-                        playbackInfo.CurrentlyPlaying.FullTrack.Artists[0].Name);
-                    
-                    // Clear request cache after skipping to get fresh data
-                    requestCache.ClearCache();
-                    return;
+                    await spotifyService.SkipIfFlaggedAsync(spotify);
+                    _lastAuthWarning = DateTime.MinValue;
                 }
-
-                // Check if we're near the end of current track and next track is flagged
-                if (playbackInfo.RemainingTimeMs <= 5000) // 5 seconds or less remaining
+                else if (DateTime.UtcNow - _lastAuthWarning > _authWarningCooldown)
                 {
-                    var nextTrack = playbackInfo.Queue?.FirstOrDefault();
-                    if (nextTrack?.IsFlagged == true)
-                    {
-                        await spotify.Player.SkipNext(new PlayerSkipNextRequest());
-                        _logger.LogInformation("Pre-skipped flagged upcoming track: {TrackName} by {ArtistName}",
-                            nextTrack.FullTrack.Name,
-                            nextTrack.FullTrack.Artists[0].Name);
-                        
-                        // Clear request cache after skipping to get fresh data
-                        requestCache.ClearCache();
-                    }
+                    _logger.LogWarning("Spotify client not available. Authentication may be required.");
+                    _lastAuthWarning = DateTime.UtcNow;
                 }
-            }
-            catch (APIException ex)
-            {
-                _logger.LogWarning("Spotify API error: {Message}", ex.Message);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error in MonitorAndSkipFlaggedTracksAsync");
+                _logger.LogError(ex, "Error occurred while monitoring Spotify queue.");
             }
         }
     }

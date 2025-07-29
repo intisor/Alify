@@ -5,11 +5,13 @@ using SpotifyAPI.Web;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
+builder.Services.AddSignalR(); // Add SignalR support
 builder.Services.AddSession(options =>
 {
-	options.IdleTimeout = TimeSpan.FromMinutes(17);
+	options.IdleTimeout = TimeSpan.FromMinutes(30); // Increased timeout for better UX
 	options.Cookie.HttpOnly = true;
 	options.Cookie.IsEssential = true;
+	options.Cookie.SameSite = SameSiteMode.Lax; // Better for OAuth flows
 });
 builder.Services.AddHttpClient(); // for making HTTP requests (lyrics, AI, etc.)
 builder.Services.AddSingleton<SpotifyService>(); // our main backend logic
@@ -23,39 +25,27 @@ builder.Services.AddMemoryCache();
 // Register singleton cache for Spotify API calls (changed from scoped to singleton)
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
-// Register the background service
+// Register the background service for queue monitoring
 builder.Services.AddSingleton<SpotifyQueueMonitorService>();
 builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider => 
     provider.GetRequiredService<SpotifyQueueMonitorService>());
 
+
 var app = builder.Build();
+
+// Configure the HTTP request pipeline
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession(); // enable session usage
-app.MapControllers();
 app.UseAuthorization();
+app.MapControllers();
 app.MapRazorPages();
-app.MapGet("/Index", (IConfiguration config, HttpContext context) =>
-{
-	var loginRequest = new LoginRequest(
-		new Uri(config["Spotify:RedirectUri"]),
-		config["Spotify:ClientId"],
-		LoginRequest.ResponseType.Code
-	)
-	{
-		Scope = new List<string> {
-			Scopes.PlaylistModifyPrivate,
-			Scopes.PlaylistModifyPublic,
-			Scopes.UserReadCurrentlyPlaying,
-			Scopes.UserReadPlaybackState,
-			Scopes.UserModifyPlaybackState
-		}
-	};
-
-	var loginUri = loginRequest.ToUri();
-	context.Response.Redirect(loginUri.ToString());
-	return Task.CompletedTask;
-});
 
 app.Run();
