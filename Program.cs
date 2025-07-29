@@ -10,10 +10,10 @@ builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
-builder.Services.AddSignalR(); // Add SignalR support
+//builder.Services.AddSignalR(); // Add SignalR support
 builder.Services.AddResponseCompression(options =>
 {
-    options.EnableForHttps = true;
+	options.EnableForHttps = true;
 });
 builder.Services.AddSession(options =>
 {
@@ -32,15 +32,15 @@ builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
 
 // Configure strongly typed options
-builder.Services.Configure<ApiKeys>(builder.Configuration);
+builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
 
 // Register singleton cache for Spotify API calls (changed from scoped to singleton)
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring
 builder.Services.AddSingleton<SpotifyQueueMonitorService>();
-builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider => 
-    provider.GetRequiredService<SpotifyQueueMonitorService>());
+builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
+	provider.GetRequiredService<SpotifyQueueMonitorService>());
 
 
 var app = builder.Build();
@@ -48,8 +48,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
-    app.UseHsts();
+	app.UseExceptionHandler("/Error");
+	app.UseHsts();
 }
 
 app.UseResponseCompression();

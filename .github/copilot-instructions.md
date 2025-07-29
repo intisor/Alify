@@ -63,4 +63,14 @@ When assisting with code in this workspace, please adhere to the following .NET 
 
 ---
 
+**Security Guidelines:**
+
+- Never put untrusted data into your HTML input, unless you follow the rest of the steps below. Untrusted data is any data that may be controlled by a cyberattacker, such as HTML form inputs, query strings, HTTP headers, or even data sourced from a database, as a cyberattacker may be able to breach your database even if they can't breach your application.
+- Before putting untrusted data into an HTML element, ensure that it's HTML encoded. HTML encoding takes characters such as `<` and changes them into a safe form like `&lt;`.
+- Before putting untrusted data into an HTML attribute, ensure that it's HTML attribute encoded. This specialized form of HTML encoding handles double quotes (`"`), single quotes (`'`), ampersands (`&`), and less-than (`<`) characters. When dealing with untrusted input, use HTML encoding for general HTML content and HTML attribute encoding for HTML attributes.
+- Before putting untrusted data into JavaScript, place the data in an HTML element whose contents you retrieve at runtime. If this isn't possible, then ensure the data is JavaScript encoded. JavaScript encoding takes dangerous characters for JavaScript and replaces them with their hex, for example, `<` would be encoded as `\u003C`.
+- Before putting untrusted data into a URL query string ensure it's URL encoded.
+
+---
+
 **Golden Rule:** Always analyze and measure performance before and after making improvements to validate their impact.
