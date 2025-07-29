@@ -144,94 +144,175 @@ namespace Alify.Services
                 return cachedResult;
             }
 
-            var apiKey = _configuration["Gemini:ApiKey"];
-            if (string.IsNullOrEmpty(apiKey) || apiKey.StartsWith("AIza") == false)
-            {
-                Console.WriteLine("Gemini API key is not configured. Please set it in appsettings.json.");
-                return null;
-            }
-
-            return await ModerateLyricsWithRetryAsync(lyrics, apiKey, cacheKey);
+            // The check for the primary API key is now handled within the retry logic.
+            return await ModerateLyricsWithRetryAsync(lyrics, cacheKey);
         }
 
         /// <summary>
-        /// Moderates lyrics with a retry mechanism and rate limiting.
+        /// Moderates lyrics with a retry mechanism and rate limiting, falling back to OpenRouter and Mistral if Gemini fails.
         /// </summary>
         /// <param name="lyrics">The lyrics to moderate.</param>
-        /// <param name="apiKey">The Gemini API key.</param>
         /// <param name="cacheKey">The cache key for storing the result.</param>
         /// <returns>A <see cref="LyricsModerationResult"/>, or null if the request fails.</returns>
-        private async Task<LyricsModerationResult?> ModerateLyricsWithRetryAsync(string lyrics, string apiKey, string cacheKey)
+        private async Task<LyricsModerationResult?> ModerateLyricsWithRetryAsync(string lyrics, string cacheKey)
         {
             const int maxRetries = 3;
-            var endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
             var promptBuilder = new StringBuilder();
             promptBuilder.Append("Return only valid JSON like:\n{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }\n\nLyrics:\n");
             promptBuilder.Append(lyrics);
-            var prompt = new { contents = new[] { new { parts = new[] { new { text = promptBuilder.ToString() } }, role = "user" } } };
-            var requestJson = JsonSerializer.Serialize(prompt);
+            var prompt = promptBuilder.ToString();
 
-            for (var attempt = 1; attempt <= maxRetries; attempt++)
+            var providers = new List<(string Provider, string Endpoint, string ApiKeyConfig, string Model)>
             {
-                await _geminiRateLimiter.WaitAsync();
-                try
+                ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", "Gemini:ApiKey", "gemini-1.5-flash"),
+                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "OpenRouter:ApiKey", "mistralai/mixtral-8x7b-instruct:free"),
+                ("Mistral", "https://api.mistral.ai/v1/chat/completions", "Mistral:ApiKey", "mistral-moderation-2411")
+            };
+
+            foreach (var (provider, endpoint, apiKeyConfig, model) in providers)
+            {
+                var providerApiKey = _configuration[apiKeyConfig];
+                if (string.IsNullOrEmpty(providerApiKey))
                 {
-                    var timeSinceLastRequest = DateTime.UtcNow - _lastGeminiRequestTime;
-                    if (timeSinceLastRequest < _geminiRequestInterval)
-                    {
-                        await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
-                    }
+                    Console.WriteLine($"{provider} API key is not configured.");
+                    continue;
+                }
 
-                    // Create a CancellationTokenSource for the request timeout
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                    var requestBody = new StringContent(requestJson, Encoding.UTF8, "application/json");
-                    
-                    // Use the injected _httpClient instead of creating a new one
-                    var response = await _httpClient.PostAsync($"{endpoint}?key={apiKey}", requestBody, cts.Token);
-
-                    if (response.IsSuccessStatusCode)
+                for (var attempt = 1; attempt <= maxRetries; attempt++)
+                {
+                    await _geminiRateLimiter.WaitAsync();
+                    try
                     {
-                        var responseString = await response.Content.ReadAsStringAsync();
-                        var result = ParseGeminiResponse(responseString);
+                        var timeSinceLastRequest = DateTime.UtcNow - _lastGeminiRequestTime;
+                        if (timeSinceLastRequest < _geminiRequestInterval)
+                        {
+                            await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
+                        }
+
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        var result = await CallApiAsync(provider, endpoint, providerApiKey, model, prompt, cts.Token);
                         if (result != null)
                         {
                             _cache.Set(cacheKey, result, TimeSpan.FromHours(24));
-                            Console.WriteLine($"Gemini moderation successful (attempt {attempt})");
+                            Console.WriteLine($"{provider} moderation successful (attempt {attempt})");
+                            return result;
                         }
-                        return result;
-                    }
 
-                    if (!IsRetryable(response.StatusCode) || attempt == maxRetries)
+                        if (attempt == maxRetries)
+                        {
+                            Console.WriteLine($"{provider} API failed after {maxRetries} attempts. Trying next provider...");
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException ex)
                     {
-                        Console.WriteLine($"Gemini API request failed with status {response.StatusCode}. Not retrying.");
-                        return null;
+                        Console.WriteLine($"Error with {provider} (attempt {attempt}): Request timed out. {ex.Message}");
+                        if (attempt == maxRetries) break;
                     }
-                }
-                // Catch OperationCanceledException specifically for timeouts
-                catch (OperationCanceledException ex)
-                {
-                    Console.WriteLine($"Error during lyrics moderation (attempt {attempt}): Request timed out. {ex.Message}");
-                    if (attempt == maxRetries) return null;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error during lyrics moderation (attempt {attempt}): {ex.Message}");
-                    if (attempt == maxRetries) return null;
-                }
-                finally
-                {
-                    _lastGeminiRequestTime = DateTime.UtcNow;
-                    _geminiRateLimiter.Release();
-                }
+                    catch (HttpRequestException ex) when (ex.StatusCode.HasValue && IsRetryable(ex.StatusCode.Value))
+                    {
+                        Console.WriteLine($"Error with {provider} (attempt {attempt}): Rate limit or server error. {ex.Message}");
+                        if (attempt == maxRetries) break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error with {provider} (attempt {attempt}): {ex.Message}");
+                        if (attempt == maxRetries) break;
+                    }
+                    finally
+                    {
+                        _lastGeminiRequestTime = DateTime.UtcNow;
+                        _geminiRateLimiter.Release();
+                    }
 
-                if (attempt < maxRetries)
-                {
-                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                    Console.WriteLine($"Waiting {delay.TotalSeconds}s before retry...");
-                    await Task.Delay(delay);
+                    if (attempt < maxRetries)
+                    {
+                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                        Console.WriteLine($"Waiting {delay.TotalSeconds}s before retry...");
+                        await Task.Delay(delay);
+                    }
                 }
             }
+
+            Console.WriteLine("All providers failed to process the request.");
             return null;
+        }
+
+        /// <summary>
+        /// Makes an API call to the specified provider.
+        /// </summary>
+        /// <param name="provider">The API provider name.</param>
+        /// <param name="endpoint">The API endpoint URL.</param>
+        /// <param name="apiKey">The API key for the provider.</param>
+        /// <param name="model">The model to use for the provider.</param>
+        /// <param name="prompt">The prompt to send.</param>
+        /// <param name="cancellationToken">The cancellation token for the request.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/>, or null if the request fails.</returns>
+        private async Task<LyricsModerationResult?> CallApiAsync(string provider, string endpoint, string apiKey, string model, string prompt, CancellationToken cancellationToken)
+        {
+            var requestBody = provider == "Gemini"
+                ? new { contents = new[] { new { parts = new[] { new { text = prompt } }, role = "user" } } }
+                : (object)new { model, messages = new[] { new { role = "user", content = prompt } } };
+
+            var requestJson = JsonSerializer.Serialize(requestBody);
+            var request = new HttpRequestMessage(HttpMethod.Post, provider == "Gemini" ? $"{endpoint}?key={apiKey}" : endpoint)
+            {
+                Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
+            };
+
+            if (provider != "Gemini")
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            }
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (IsRetryable(response.StatusCode))
+                {
+                    // This will throw HttpRequestException, which is caught by the caller for retry/fallback.
+                    response.EnsureSuccessStatusCode();
+                }
+                Console.WriteLine($"{provider} API request failed with non-retryable status {response.StatusCode}.");
+                return null;
+            }
+
+            var responseString = await response.Content.ReadAsStringAsync();
+            return provider == "Gemini" ? ParseGeminiResponse(responseString) : ParseOpenAIResponse(responseString);
+        }
+
+        /// <summary>
+        /// Parses the JSON response from OpenAI-compatible APIs (OpenRouter, Mistral).
+        /// </summary>
+        /// <param name="responseString">The JSON response string.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
+        private static LyricsModerationResult? ParseOpenAIResponse(string responseString)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(responseString);
+                var content = doc.RootElement
+                    .GetProperty("choices")[0]
+                    .GetProperty("message")
+                    .GetProperty("content")
+                    .GetString();
+
+                if (content is null) return null;
+
+                var jsonStart = content.IndexOf('{');
+                var jsonEnd = content.LastIndexOf('}');
+
+                if (jsonStart == -1 || jsonEnd == -1) return null;
+
+                var cleanJson = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                return JsonSerializer.Deserialize<LyricsModerationResult>(cleanJson);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to parse OpenAI-style response: {ex.Message}");
+                return null;
+            }
         }
 
         /// <summary>
