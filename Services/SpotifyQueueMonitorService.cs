@@ -47,8 +47,13 @@ namespace Alify.Services
                 if (_isMonitoring)
                 {
                     await CheckQueueAsync();
+                    await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
                 }
-                await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+                else
+                {
+                    // Exit the loop if not monitoring
+                    break;
+                }
             }
             _logger.LogInformation("Spotify Queue Monitor Service stopped.");
         }

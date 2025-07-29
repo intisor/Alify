@@ -239,25 +239,33 @@ public class SpotifyService
     /// </remarks>
     private async Task<Track> CreateTrackFromFullTrackAsync(FullTrack fullTrack)
     {
-        // Extract the primary artist name for lyrics lookup
-        var artistName = fullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
-        
-        // Fetch lyrics from Genius API through the LyricService
-        var lyrics = await _lyricService.GetLyricsAsync(artistName, fullTrack.Name);
-        
-        // Only moderate lyrics if they were found
-        var moderation = string.IsNullOrEmpty(lyrics) ? null : await _lyricService.ModerateLyricsAsync(lyrics);
+        // A track's URI or ID is a perfect unique key for caching.
+        var cacheKey = $"Track_{fullTrack.Id}";
 
-        // A track is flagged if it's explicitly marked by Spotify or if the lyrics are deemed inappropriate
-        // This determination is used by the content filtering system
+        // 1. Try to get the fully processed track from the cache first.
+        if (_cache.TryGetValue(cacheKey, out Track? cachedTrack))
+        {
+            return cachedTrack!;
+        }
+
+        // 2. If not in cache, perform the expensive processing.
+        var artistName = fullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
+        var lyrics = await _lyricService.GetLyricsAsync(artistName, fullTrack.Name);
+        var moderation = string.IsNullOrEmpty(lyrics) ? null : await _lyricService.ModerateLyricsAsync(lyrics);
         var isFlagged = fullTrack.Explicit || (moderation != null && !moderation.suitable_for_kids);
 
-        return new Track
+        var newTrack = new Track
         {
             FullTrack = fullTrack,
             Lyrics = lyrics,
             IsFlagged = isFlagged
         };
+
+        // 3. Store the newly created Track object in the cache for future requests.
+        // We'll cache it for an hour; adjust as needed.
+        _cache.Set(cacheKey, newTrack, TimeSpan.FromHours(1));
+
+        return newTrack;
     }
 
     /// <summary>

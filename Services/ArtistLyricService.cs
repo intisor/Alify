@@ -1,4 +1,5 @@
 ﻿using Alify.Models;
+using SpotifyAPI.Web;
 using System.Text.RegularExpressions;
 
 namespace Alify.Services
@@ -33,7 +34,7 @@ namespace Alify.Services
         /// </summary>
         /// <param name="lyrics">The full lyrics of a song as a single string.</param>
         /// <returns>A <see cref="LyricMapping"/> object containing the structured lyric data.</returns>
-        public LyricMapping ParseLyricsWithArtistMapping(string lyrics)
+        public LyricMapping ParseLyricsWithArtistMapping(string lyrics, string mainArtist = null)
         {
             if (string.IsNullOrWhiteSpace(lyrics))
             {
@@ -46,7 +47,7 @@ namespace Alify.Services
             // BOOKMARK: State Management during Parsing
             // These variables keep track of the current artist and section as we iterate through the lines.
             // This is a state machine approach to parsing.
-            string currentArtist = null;
+            string currentArtist = mainArtist;
             string currentSection = null;
             int lineNumber = 1;
 
@@ -74,7 +75,8 @@ namespace Alify.Services
                 if (match.Success)
                 {
                     lyricLine.IsAnnotation = true;
-                    
+               
+
                     var section = match.Groups["section"].Value.Trim();
                     var artist = match.Groups["artist"].Value.Trim();
 

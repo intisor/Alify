@@ -1,4 +1,5 @@
-﻿using Alify.Models;
+﻿#nullable enable
+using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
 using System.Net;
@@ -41,12 +42,12 @@ namespace Alify.Services
         /// <param name="artist">The artist of the song.</param>
         /// <param name="title">The title of the song.</param>
         /// <returns>The lyrics of the song, or null if not found.</returns>
-        public async Task<string> GetLyricsAsync(string artist, string title)
+        public async Task<string?> GetLyricsAsync(string artist, string title)
         {
             var cacheKey = $"lyrics_{artist}_{title}";
             if (_cache.TryGetValue(cacheKey, out string? cachedLyrics))
             {
-                return cachedLyrics!;
+                return cachedLyrics;
             }
 
             var geniusLyrics = await GetLyricsFromGeniusAsync(title, artist);
@@ -112,7 +113,15 @@ namespace Alify.Services
                 var lyricsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'Lyrics__Container')]");
                 if (lyricsNode == null) return null;
 
-                var lyrics = HttpUtility.HtmlDecode(lyricsNode.InnerText).Trim();
+                // Replace <br> tags with newlines to preserve formatting
+                var lyricsHtml = lyricsNode.InnerHtml;
+                var lyricsWithNewlines = lyricsHtml.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase);
+
+                // Create a new HtmlDocument to parse the modified HTML and get the plain text
+                var tempDoc = new HtmlDocument();
+                tempDoc.LoadHtml(lyricsWithNewlines);
+                var lyrics = HttpUtility.HtmlDecode(tempDoc.DocumentNode.InnerText).Trim();
+
                 return string.IsNullOrWhiteSpace(lyrics) ? null : lyrics;
             }
             catch (Exception ex)
@@ -156,7 +165,10 @@ namespace Alify.Services
         {
             const int maxRetries = 3;
             var endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
-            var prompt = new { contents = new[] { new { parts = new[] { new { text = $"Return only valid JSON like:\n{{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }}\n\nLyrics:\n{lyrics}" } }, role = "user" } } };
+            var promptBuilder = new StringBuilder();
+            promptBuilder.Append("Return only valid JSON like:\n{ \"violence\": true/false, \"hate\": true/false, \"profanity\": true/false, \"sexual\": true/false, \"suitable_for_kids\": true/false }\n\nLyrics:\n");
+            promptBuilder.Append(lyrics);
+            var prompt = new { contents = new[] { new { parts = new[] { new { text = promptBuilder.ToString() } }, role = "user" } } };
             var requestJson = JsonSerializer.Serialize(prompt);
 
             for (var attempt = 1; attempt <= maxRetries; attempt++)
@@ -170,9 +182,12 @@ namespace Alify.Services
                         await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
                     }
 
-                    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                    // Create a CancellationTokenSource for the request timeout
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                     var requestBody = new StringContent(requestJson, Encoding.UTF8, "application/json");
-                    var response = await client.PostAsync($"{endpoint}?key={apiKey}", requestBody);
+                    
+                    // Use the injected _httpClient instead of creating a new one
+                    var response = await _httpClient.PostAsync($"{endpoint}?key={apiKey}", requestBody, cts.Token);
 
                     if (response.IsSuccessStatusCode)
                     {
@@ -191,6 +206,12 @@ namespace Alify.Services
                         Console.WriteLine($"Gemini API request failed with status {response.StatusCode}. Not retrying.");
                         return null;
                     }
+                }
+                // Catch OperationCanceledException specifically for timeouts
+                catch (OperationCanceledException ex)
+                {
+                    Console.WriteLine($"Error during lyrics moderation (attempt {attempt}): Request timed out. {ex.Message}");
+                    if (attempt == maxRetries) return null;
                 }
                 catch (Exception ex)
                 {
@@ -233,8 +254,10 @@ namespace Alify.Services
                 using var doc = JsonDocument.Parse(responseString);
                 var textResponse = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
 
-                var jsonStart = textResponse?.IndexOf('{') ?? -1;
-                var jsonEnd = textResponse?.LastIndexOf('}') ?? -1;
+                if (textResponse is null) return null;
+
+                var jsonStart = textResponse.IndexOf('{');
+                var jsonEnd = textResponse.LastIndexOf('}');
 
                 if (jsonStart == -1 || jsonEnd == -1) return null;
 
