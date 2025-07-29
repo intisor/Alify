@@ -28,12 +28,12 @@ namespace Alify.Services
         /// Initializes a new instance of the <see cref="LyricService"/> class.
         /// </summary>
         /// <param name="httpClient">The HTTP client for making requests.</param>
-        /// <param name="apiKeysSnapshot">The application configuration for accessing API keys.</param>
+        /// <param name="apiKeys">The application configuration for accessing API keys.</param>
         /// <param name="cache">The memory cache for storing lyrics and moderation results.</param>
-        public LyricService(HttpClient httpClient, IOptionsSnapshot<ApiKeys> apiKeysSnapshot, IMemoryCache cache)
+        public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache)
         {
             _httpClient = httpClient;
-            _apiKeys = apiKeysSnapshot.Value;
+            _apiKeys = apiKeys.Value;
             _cache = cache;
         }
 

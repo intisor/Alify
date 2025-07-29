@@ -23,7 +23,9 @@ builder.Services.AddSession(options =>
 	options.Cookie.SameSite = SameSiteMode.Lax; // Better for OAuth flows
 });
 builder.Services.AddHttpClient(); // for making HTTP requests (lyrics, AI, etc.)
-builder.Services.AddSingleton<SpotifyService>(); // our main backend logic
+builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
+builder.Services.Configure<SpotifyOptions>(builder.Configuration.GetSection("Spotify"));
+builder.Services.AddSingleton<SpotifyService>();
 builder.Services.AddHttpClient<LyricService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ArtistLyricService>();
@@ -31,16 +33,13 @@ builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
 
-// Configure strongly typed options
-builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
-
 // Register singleton cache for Spotify API calls (changed from scoped to singleton)
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring
 builder.Services.AddSingleton<SpotifyQueueMonitorService>();
 builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
-	provider.GetRequiredService<SpotifyQueueMonitorService>());
+    provider.GetRequiredService<SpotifyQueueMonitorService>());
 
 
 var app = builder.Build();
@@ -53,7 +52,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseResponseCompression();
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession(); // enable session usage

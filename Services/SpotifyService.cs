@@ -5,7 +5,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Alify.Services;
 
 /// <summary>
@@ -15,7 +15,7 @@ using Alify.Services;
 public class SpotifyService
 {
     // Dependencies injected through the constructor
-    private readonly IConfiguration _config;
+    private readonly SpotifyOptions _spotifyOptions;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly LyricService _lyricService;
     private readonly IMemoryCache _cache;
@@ -24,19 +24,19 @@ public class SpotifyService
     /// <summary>
     /// Initializes a new instance of the <see cref="SpotifyService"/> class.
     /// </summary>
-    /// <param name="config">The application configuration for accessing API keys and settings.</param>
+    /// <param name="spotifyOptions">The Spotify settings from configuration.</param>
     /// <param name="httpContextAccessor">Accessor for the current HTTP context to manage user-specific session data.</param>
     /// <param name="lyricService">Service for fetching and moderating lyrics from external APIs.</param>
     /// <param name="cache">In-memory cache for storing data to reduce API calls and improve performance.</param>
     /// <param name="requestCache">Specialized cache for Spotify API requests to avoid rate limiting.</param>
     public SpotifyService(
-        IConfiguration config,
+        IOptions<SpotifyOptions> spotifyOptions,
         IHttpContextAccessor httpContextAccessor,
         LyricService lyricService,
         IMemoryCache cache,
         SpotifyRequestCache requestCache)
     {
-        _config = config;
+        _spotifyOptions = spotifyOptions.Value;
         _httpContextAccessor = httpContextAccessor;
         _lyricService = lyricService;
         _cache = cache;
@@ -63,8 +63,8 @@ public class SpotifyService
     public string StartAuth()
     {
         // Get configuration values from appsettings.json or user secrets
-        var clientId = _config["Spotify:ClientId"]!;
-        var redirectUri = _config["Spotify:RedirectUri"]!;
+        var clientId = _spotifyOptions.ClientId!;
+        var redirectUri = _spotifyOptions.RedirectUri!;
         
         // Generate a unique state to prevent CSRF attacks
         // This is a security measure required by the OAuth 2.0 spec
@@ -112,10 +112,10 @@ public class SpotifyService
 
         // Exchange the authorization code for access and refresh tokens
         var tokenResponse = await new OAuthClient().RequestToken(new AuthorizationCodeTokenRequest(
-            _config["Spotify:ClientId"]!,
-            _config["Spotify:ClientSecret"]!,
+            _spotifyOptions.ClientId!,
+            _spotifyOptions.ClientSecret!,
             code,
-            new Uri(_config["Spotify:RedirectUri"]!)
+            new Uri(_spotifyOptions.RedirectUri!)
         ));
 
         // Store tokens and expiry date in the session for future use
@@ -187,8 +187,8 @@ public class SpotifyService
 
         // Request a new access token using the refresh token
         var newResponse = await new OAuthClient().RequestToken(new AuthorizationCodeRefreshRequest(
-            _config["Spotify:ClientId"]!,
-            _config["Spotify:ClientSecret"]!,
+            _spotifyOptions.ClientId!,
+            _spotifyOptions.ClientSecret!,
             refreshToken
         ));
 
