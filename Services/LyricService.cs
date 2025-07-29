@@ -2,6 +2,7 @@
 using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -15,8 +16,8 @@ namespace Alify.Services
     public class LyricService
     {
         private readonly HttpClient _httpClient;
-        private readonly IConfiguration _configuration;
         private readonly IMemoryCache _cache;
+        private readonly ApiKeys _apiKeys;
 
         // Gemini API rate limiting (30 RPM = 1 request every 2 seconds)
         private static readonly SemaphoreSlim _geminiRateLimiter = new(1, 1);
@@ -27,12 +28,12 @@ namespace Alify.Services
         /// Initializes a new instance of the <see cref="LyricService"/> class.
         /// </summary>
         /// <param name="httpClient">The HTTP client for making requests.</param>
-        /// <param name="configuration">The application configuration for accessing API keys.</param>
+        /// <param name="apiKeysSnapshot">The application configuration for accessing API keys.</param>
         /// <param name="cache">The memory cache for storing lyrics and moderation results.</param>
-        public LyricService(HttpClient httpClient, IConfiguration configuration, IMemoryCache cache)
+        public LyricService(HttpClient httpClient, IOptionsSnapshot<ApiKeys> apiKeysSnapshot, IMemoryCache cache)
         {
             _httpClient = httpClient;
-            _configuration = configuration;
+            _apiKeys = apiKeysSnapshot.Value;
             _cache = cache;
         }
 
@@ -75,7 +76,7 @@ namespace Alify.Services
         {
             try
             {
-                var geniusKey = _configuration["Genius:token"];
+                var geniusKey = _apiKeys.Genius?.Token;
                 if (string.IsNullOrEmpty(geniusKey))
                 {
                     Console.WriteLine("Genius API token is not configured.");
@@ -162,16 +163,15 @@ namespace Alify.Services
             promptBuilder.Append(lyrics);
             var prompt = promptBuilder.ToString();
 
-            var providers = new List<(string Provider, string Endpoint, string ApiKeyConfig, string Model)>
+            var providers = new List<(string Provider, string Endpoint, string? ApiKey, string Model)>
             {
-                ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", "Gemini:ApiKey", "gemini-1.5-flash"),
-                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", "OpenRouter:ApiKey", "mistralai/mixtral-8x7b-instruct:free"),
-                ("Mistral", "https://api.mistral.ai/v1/chat/completions", "Mistral:ApiKey", "mistral-moderation-2411")
+                ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", _apiKeys.Gemini?.ApiKey, "gemini-1.5-flash"),
+                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "mistralai/mixtral-8x7b-instruct:free"),
+                ("Mistral", "https://api.mistral.ai/v1/chat/completions", _apiKeys.Mistral?.ApiKey, "mistral-moderation-2411")
             };
 
-            foreach (var (provider, endpoint, apiKeyConfig, model) in providers)
+            foreach (var (provider, endpoint, providerApiKey, model) in providers)
             {
-                var providerApiKey = _configuration[apiKeyConfig];
                 if (string.IsNullOrEmpty(providerApiKey))
                 {
                     Console.WriteLine($"{provider} API key is not configured.");

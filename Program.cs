@@ -1,8 +1,13 @@
 using Alify.Controllers;
+using Alify.Models;
 using Alify.Services;
 using SpotifyAPI.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Doppler integration
+builder.Configuration.AddEnvironmentVariables();
+
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddSignalR(); // Add SignalR support
@@ -25,6 +30,9 @@ builder.Services.AddSingleton<ArtistLyricService>();
 builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
+
+// Configure strongly typed options
+builder.Services.Configure<ApiKeys>(builder.Configuration);
 
 // Register singleton cache for Spotify API calls (changed from scoped to singleton)
 builder.Services.AddSingleton<SpotifyRequestCache>();
