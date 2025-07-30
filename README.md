@@ -79,20 +79,14 @@ This feature provides a unique and intuitive way to read lyrics.
 
 ### Configuration
 1.  **Clone the repository.**
-2.  **Configure API Keys**: Store your API keys in `appsettings.json` or use User Secrets for better security:
-    ```json
-    {
-      "Spotify": {
-        "ClientId": "your_spotify_client_id",
-        "ClientSecret": "your_spotify_client_secret",
-        "RedirectUri": "http://127.0.0.1:7236/callback"
-      },
-      "Genius": {
-        "token": "your_genius_api_token"
-      }
-    }
+2.  **Generate a Doppler Service Token**:
+    - Navigate to your project in the Doppler dashboard.
+    - Go to the "Access" tab and generate a new read-only Service Token.
+3.  **Configure the Doppler Token**: Store your Service Token using .NET's User Secrets. This is the recommended and most secure method for local development. Run the following command in your project's root directory:
+    ```bash
+    dotnet user-secrets set "DOPPLER_TOKEN" "your_doppler_service_token"
     ```
-    *Note: For Spotify, ensure the `RedirectUri` is registered in your Spotify Developer Dashboard.*
+    *Note: The application will fetch all other secrets (like Spotify and Genius keys) directly from your Doppler project. Ensure they are configured correctly in the Doppler UI.*
 
 ### Running the App
 1.  Open a terminal in the project root.

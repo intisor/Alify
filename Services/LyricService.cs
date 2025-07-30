@@ -1,4 +1,5 @@
 ﻿#nullable enable
+using System.Diagnostics;
 using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
@@ -13,6 +14,7 @@ namespace Alify.Services
     /// <summary>
     /// Service for fetching and moderating song lyrics.
     /// </summary>
+    [DebuggerDisplay("HasGeniusKey: {_apiKeys.Genius?.Token != null}, HasGeminiKey: {_apiKeys.Gemini?.ApiKey != null}, HasOpenRouterKey: {_apiKeys.OpenRouter?.ApiKey != null}, HasMistralKey: {_apiKeys.Mistral?.ApiKey != null}")]
     public class LyricService
     {
         private readonly HttpClient _httpClient;

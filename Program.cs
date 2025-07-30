@@ -1,15 +1,20 @@
 using Alify.Controllers;
+using Alify.Doppler;
 using Alify.Models;
 using Alify.Services;
 using SpotifyAPI.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Doppler integration
-builder.Configuration.AddEnvironmentVariables();
+// Doppler integration: Read the token and add the custom configuration provider.
+// The token can come from user secrets, environment variables, or launchSettings.json.
+var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
+builder.Configuration.AddDoppler(dopplerToken);
 
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
+builder.Services.AddOutputCache();
+
 //builder.Services.AddSignalR(); // Add SignalR support
 builder.Services.AddResponseCompression(options =>
 {
@@ -41,7 +46,6 @@ builder.Services.AddSingleton<SpotifyQueueMonitorService>();
 builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
     provider.GetRequiredService<SpotifyQueueMonitorService>());
 
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -49,9 +53,11 @@ if (!app.Environment.IsDevelopment())
 {
 	app.UseExceptionHandler("/Error");
 	app.UseHsts();
+	app.UseResponseCompression();
 }
 
-app.UseResponseCompression();
+app.UseOutputCache();
+
 //app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();

@@ -1,10 +1,12 @@
-﻿using SpotifyAPI.Web;
+﻿using System.Diagnostics;
+using SpotifyAPI.Web;
 
 namespace Alify.Models
 {
     /// <summary>
     /// Represents a Spotify playlist.
     /// </summary>
+    [DebuggerDisplay("Id: {Id}, Name: {Name}, TrackCount: {TrackCount}, ActualTracks: {Tracks.Count}")]
     public class Playlist
     {
         public string Id { get; set; }
@@ -16,6 +18,7 @@ namespace Alify.Models
     /// <summary>
     /// Represents a track with its lyrics and moderation status.
     /// </summary>
+    [DebuggerDisplay("Track: {FullTrack?.Artists?.FirstOrDefault()?.Name} - {FullTrack?.Name}, IsFlagged: {IsFlagged}, HasLyrics: {!string.IsNullOrEmpty(Lyrics)}")]
     public class Track
     {
         public FullTrack FullTrack { get; set; }
@@ -26,6 +29,7 @@ namespace Alify.Models
     /// <summary>
     /// Represents the current Spotify playback information.
     /// </summary>
+    [DebuggerDisplay("CurrentlyPlaying: {CurrentlyPlaying?.FullTrack?.Name}, QueueCount: {Queue.Count}, RemainingTime: {RemainingTimeMs}ms")]
     public class SpotifyPlaybackInfo
     {
         public Track CurrentlyPlaying { get; set; }
@@ -36,6 +40,7 @@ namespace Alify.Models
     /// <summary>
     /// Represents the result of lyrics moderation.
     /// </summary>
+    [DebuggerDisplay("Violence: {violence}, Hate: {hate}, Sexual: {sexual}, Profanity: {profanity}, SuitableForKids: {suitable_for_kids}")]
     public class LyricsModerationResult
     {
         public bool violence { get; set; }
@@ -49,6 +54,7 @@ namespace Alify.Models
     /// <summary>
     /// Represents a single line of lyrics with its metadata.
     /// </summary>
+    [DebuggerDisplay("Line {LineNumber}: {Text} [{Artist}] [{Section}] IsAnnotation: {IsAnnotation}")]
     public class LyricLine
     {
         public int LineNumber { get; set; }
@@ -61,6 +67,7 @@ namespace Alify.Models
     /// <summary>
     /// Manages a collection of lyric lines.
     /// </summary>
+    [DebuggerDisplay("TotalLines: {Lines.Count}, Artists: {GetArtists().Count}, Sections: {GetSections().Count}")]
     public class LyricMapping
     {
         private readonly List<LyricLine> _lines = [];

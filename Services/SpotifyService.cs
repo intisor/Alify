@@ -1,4 +1,5 @@
-﻿using Alify.Models;
+﻿using System.Diagnostics;
+using Alify.Models;
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
 using System;
@@ -12,6 +13,7 @@ using Alify.Services;
 /// Service for interacting with the Spotify API.
 /// Handles authentication, playback control, and data fetching.
 /// </summary>
+[DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
 {
     // Dependencies injected through the constructor
@@ -280,16 +282,6 @@ public class SpotifyService
     /// </remarks>
     public async Task<SpotifyPlaybackInfo?> GetCurrentPlaybackInfoAsync(SpotifyClient spotify)
     {
-        // Create a user-specific cache key to prevent session data mixing
-        var cacheKey = GetUserSpecificCacheKey("PlaybackInfo");
-        
-        // Check if playback info is already cached
-        // This reduces API calls when multiple components request the same data
-        if (_cache.TryGetValue(cacheKey, out SpotifyPlaybackInfo? playbackInfo))
-        {
-            return playbackInfo;
-        }
-
         // Get the currently playing track using the request cache
         // The request cache adds another layer of caching at the API call level
         var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
@@ -298,19 +290,17 @@ public class SpotifyService
         // Get the upcoming tracks in the queue
         var queueResponse = await _requestCache.GetQueueAsync(spotify);
         
-        // Process each track in the queue to add lyrics and moderation info
-        var queueTasks = queueResponse?.Queue.OfType<FullTrack>().Select(CreateTrackFromFullTrackAsync) ?? Enumerable.Empty<Task<Track>>();
+        // Process each track in the queue to add lyrics and moderation info, limiting to the next 10 tracks.
+        var queueTasks = queueResponse?.Queue.OfType<FullTrack>().Take(10).Select(CreateTrackFromFullTrackAsync) ?? Enumerable.Empty<Task<Track>>();
 
         // Build the complete playback info object
-        playbackInfo = new SpotifyPlaybackInfo
+        var playbackInfo = new SpotifyPlaybackInfo
         {
             CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentTrack),
             RemainingTimeMs = currentTrack.DurationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
             Queue = (await Task.WhenAll(queueTasks)).ToList()
         };
 
-        // Cache the playback info for a short duration to balance freshness with performance
-        _cache.Set(cacheKey, playbackInfo, TimeSpan.FromSeconds(10));
         return playbackInfo;
     }
 

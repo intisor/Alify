@@ -1,4 +1,5 @@
-﻿using Alify.Models;
+﻿using System.Diagnostics;
+using Alify.Models;
 using SpotifyAPI.Web;
 using System.Text.RegularExpressions;
 
@@ -8,6 +9,7 @@ namespace Alify.Services
     /// Provides services for parsing and analyzing song lyrics that contain artist and section annotations.
     /// This service is responsible for transforming raw lyric strings into structured data.
     /// </summary>
+    [DebuggerDisplay("ArtistLyricService - Parser for structured lyrics")]
     public partial class ArtistLyricService
     {
         // BOOKMARK: Regex for Lyric Parsing

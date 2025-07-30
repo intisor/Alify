@@ -1,0 +1,15 @@
+namespace Alify.Doppler
+{
+    public static class DopplerConfigurationExtensions
+    {
+        public static IConfigurationBuilder AddDoppler(this IConfigurationBuilder builder, string? dopplerToken)
+        {
+            if (builder == null)
+            {
+                throw new ArgumentNullException(nameof(builder));
+            }
+
+            return builder.Add(new DopplerConfigurationSource(dopplerToken));
+        }
+    }
+}

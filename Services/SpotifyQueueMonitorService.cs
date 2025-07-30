@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
 using System;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Alify.Services
 {
+    [DebuggerDisplay("IsMonitoring: {_isMonitoring}, AuthWarningCooldown: {_authWarningCooldown.TotalMinutes}min")]
     public class SpotifyQueueMonitorService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
