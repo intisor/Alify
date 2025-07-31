@@ -1,60 +1,35 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Login to Spotify";
+    ViewData["Title"] = "Home";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome to Alify </h1>
-    <p class="lead">Filter your playlists for faith-based listening</p>
-    
+<div class="max-w-xl mx-auto mt-12 p-8 bg-white rounded-lg shadow">
+    <h1 class="text-3xl font-bold mb-4 text-blue-700">Welcome to Alify</h1>
+    <p class="text-gray-700 mb-6">Stream music, view lyrics in chat format, and monitor your Spotify queue with ease.</p>
+
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <strong>Error:</strong> @Model.ErrorMessage
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
+        <div class="mb-4 px-4 py-2 rounded bg-red-100 text-red-700">@Model.ErrorMessage</div>
     }
-
     @if (!string.IsNullOrEmpty(Model.SuccessMessage))
     {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @Model.SuccessMessage
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
+        <div class="mb-4 px-4 py-2 rounded bg-green-100 text-green-700">@Model.SuccessMessage</div>
     }
-    
-    @if (Model.IsAuthenticated)
-    {
-        <div class="card mx-auto" style="max-width: 500px;">
-            <div class="card-body">
-                <h5 class="card-title text-success" >✅ Connected to Spotify</h5>
-                <p class="card-text">You're already logged in to Spotify. You can access the dashboard or logout.</p>
-                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                    <a class="btn btn-success" href="/Dashboard">Go to Dashboard</a>
-                    <a class="btn btn-primary" href="/ProductionDemo">Production Demo</a>
-                    <form method="post" asp-page-handler="logout" class="d-inline">
-                        <button type="submit" class="btn btn-outline-secondary">Logout</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    }
-    else
-    {
-        <div class="card mx-auto" style="max-width: 500px;">
-            <div class="card-body">
-                <h5 class="card-title">Connect to Spotify</h5>
-                <p class="card-text">To use Alify, you need to connect your Spotify account. This allows us to monitor your music and filter inappropriate content.</p>
-                <div class="d-grid">
-                    <a class="btn btn-success btn-lg" asp-page-handler="login">
-                        <i class="fab fa-spotify"></i> Login with Spotify
-                    </a>
-                </div>
-                <small class="text-muted mt-2 d-block">
-                    We only access your currently playing music and queue. Your playlists remain private.
-                </small>
-            </div>
-        </div>
-    }
+
+    <div class="flex gap-4 mt-6">
+        @if (Model.IsAuthenticated)
+        {
+            <form method="post">
+                <button type="submit" asp-page-handler="LogoutAsync" class="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition">Logout</button>
+            </form>
+            <a href="/Dashboard" class="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">Go to Dashboard</a>
+        }
+        else
+        {
+            <form method="get">
+                <button type="submit" asp-page-handler="Login" class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition">Login with Spotify</button>
+            </form>
+        }
+    </div>
 </div>

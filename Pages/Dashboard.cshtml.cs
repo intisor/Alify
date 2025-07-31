@@ -98,6 +98,12 @@ namespace Alify.Pages
                 return Page();
             }
 
+            // Store the access token in IMemoryCache for background service usage
+            this.WithService<IMemoryCache>(cache =>
+            {
+                cache.Set("SpotifyAuthToken", accessToken, TimeSpan.FromMinutes(60));
+            });
+
             try
             {
                 await this.WithServiceAsync<SpotifyQueueMonitorService>(async monitorService =>

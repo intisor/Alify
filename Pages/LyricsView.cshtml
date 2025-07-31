@@ -4,52 +4,29 @@
     ViewData["Title"] = "Lyrics View";
 }
 
-<!--
-    BOOKMARK: Lyrics Chat View
-    This Razor view is responsible for rendering the song lyrics in a chat-like interface.
-    It uses the data provided by the LyricsViewModel to dynamically generate the chat bubbles.
--->
-
-<div class="lyrics-chat-container">
+<div class="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow">
     @if (Model.LyricMapping != null)
     {
-        <!-- 
-            BOOKMARK: Lyric Line Iteration
-            We loop through each line in the parsed LyricMapping.
-            Each line object contains the text, artist, and whether it's an annotation.
-        -->
         foreach (var line in Model.LyricMapping.Lines)
         {
             if (line.IsAnnotation)
             {
-                <!-- 
-                    BOOKMARK: Annotation Display
-                    Annotations (like "[Chorus]") are displayed as centered, styled messages
-                    to represent song structure, similar to system messages in a chat.
-                -->
-                <div class="chat-message chat-message-center">
-                    <div class="chat-bubble chat-bubble-annotation">
-                        @line.Text
-                    </div>
+                <div class="flex justify-center mb-2">
+                    <div class="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-semibold">@line.Text</div>
                 </div>
             }
             else
             {
-                <!-- 
-                    BOOKMARK: Chat Bubble Alignment
-                    This is the core logic for the chat-like appearance.
-                    - If the line's artist is the main artist of the song, the bubble is aligned to the right.
-                    - Otherwise, it's aligned to the left, representing other artists in the "chat".
-                -->
-                var messageClass = !string.IsNullOrEmpty(line.Artist) && line.Artist == Model.MainArtist ? "chat-message-right" : "chat-message-left";
-                <div class="chat-message @messageClass">
-                    <div class="chat-bubble">
+                var isMainArtist = !string.IsNullOrEmpty(line.Artist) && line.Artist == Model.MainArtist;
+                var bubbleAlign = isMainArtist ? "justify-end" : "justify-start";
+                var bubbleColor = isMainArtist ? "bg-blue-100 text-blue-900" : "bg-gray-100 text-gray-900";
+                <div class="flex @bubbleAlign mb-2">
+                    <div class="px-4 py-2 rounded-lg shadow @bubbleColor max-w-lg">
                         @if (!string.IsNullOrEmpty(line.Artist))
                         {
-                            <!-- Display the artist's name inside the bubble. -->
-                            <div class="chat-artist">@line.Artist</div>
+                            <div class="text-xs font-semibold text-gray-500 mb-1">@line.Artist</div>
                         }
-                        <div class="chat-text">@line.Text</div>
+                        <div class="text-base">@line.Text</div>
                     </div>
                 </div>
             }
@@ -57,77 +34,6 @@
     }
     else
     {
-        <!-- Fallback message if no lyrics are available. -->
-        <p>No lyrics available for the current song.</p>
+        <p class="text-gray-500">No lyrics available for the current song.</p>
     }
 </div>
-
-<!--
-    BOOKMARK: Styling (CSS)
-    This <style> block contains all the CSS rules to make the HTML look like a chat interface.
-    Keeping the styles in the same file as the HTML makes the component self-contained and easier to understand.
--->
-<style>
-    .lyrics-chat-container {
-        max-width: 800px;
-        margin: auto;
-        padding: 20px;
-        font-family: sans-serif;
-    }
-
-    .chat-message {
-        display: flex;
-        margin-bottom: 15px;
-    }
-
-    /* Aligns messages to the left */
-    .chat-message-left {
-        justify-content: flex-start;
-    }
-
-    /* Aligns messages to the right */
-    .chat-message-right {
-        justify-content: flex-end;
-    }
-
-    /* Aligns annotation messages to the center */
-    .chat-message-center {
-        justify-content: center;
-    }
-
-    .chat-bubble {
-        max-width: 70%;
-        padding: 10px 15px;
-        border-radius: 20px;
-        color: white;
-    }
-
-    /* Style for bubbles from "other" artists */
-    .chat-message-left .chat-bubble {
-        background-color: #262d31;
-    }
-
-    /* Style for bubbles from the "main" artist (you) */
-    .chat-message-right .chat-bubble {
-        background-color: #056162;
-    }
-    
-    /* Style for annotation bubbles */
-    .chat-bubble-annotation {
-        background-color: #3d3d3d;
-        font-style: italic;
-        font-size: 0.9em;
-        text-align: center;
-    }
-
-    .chat-artist {
-        font-weight: bold;
-        margin-bottom: 5px;
-        font-size: 0.9em;
-        color: #e0e0e0;
-    }
-
-    .chat-text {
-        font-size: 1em;
-    }
-</style>

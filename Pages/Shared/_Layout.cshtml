@@ -4,49 +4,37 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Alify</title>
-    <script type="importmap"></script>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <!-- TailwindCSS CDN for quick setup; switch to npm build for production -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/Alify.styles.css" asp-append-version="true" />
 </head>
-<body>
+<body class="bg-gray-50 min-h-screen flex flex-col">
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">Alify</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/LyricsView">Lyrics Chat</a>
-                        </li>           
-                    </ul>
+        <nav class="bg-white border-b shadow mb-3">
+            <div class="container mx-auto px-4 flex items-center justify-between h-16">
+                <a class="text-xl font-bold text-blue-600" asp-area="" asp-page="/Index">Alify</a>
+                <div class="flex space-x-4">
+                    <a class="text-gray-700 hover:text-blue-600 transition" asp-area="" asp-page="/Index">Home</a>
+                    <a class="text-gray-700 hover:text-blue-600 transition" asp-area="" asp-page="/LyricsView">Lyrics Chat</a>
                 </div>
             </div>
         </nav>
     </header>
-    <div class="container">
-        <main role="main" class="pb-3">
+    <div class="container mx-auto px-4 flex-1">
+        <main role="main" class="py-6">
             @RenderBody()
         </main>
     </div>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2025 - Alify - <a asp-area="" asp-page="/Privacy">Privacy</a>
+    <footer class="border-t text-gray-500 py-4 mt-8">
+        <div class="container mx-auto px-4 text-center">
+            &copy; 2025 - Alify - <a class="text-blue-600 hover:underline" asp-area="" asp-page="/Privacy">Privacy</a>
         </div>
     </footer>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
