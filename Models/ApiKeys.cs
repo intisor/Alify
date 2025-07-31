@@ -45,5 +45,54 @@ namespace Alify.Models
     {
         public string? ApiKey { get; set; }
     }
+
+    /// <summary>
+    /// Represents the result of lyrics content moderation.
+    /// Used for checking lyrics appropriateness and content filtering.
+    /// This supports Method Injection pattern for moderation services.
+    /// </summary>
+    [DebuggerDisplay("Suitable for Kids: {suitable_for_kids}, Violence: {violence}, Hate: {hate}, Sexual: {sexual}, Profanity: {profanity}")]
+    public class LyricsModerationResult
+    {
+        /// <summary>
+        /// Indicates if the lyrics are suitable for children/kids
+        /// </summary>
+        public bool suitable_for_kids { get; set; } = true;
+
+        /// <summary>
+        /// Indicates if the lyrics contain violent content
+        /// </summary>
+        public bool violence { get; set; } = false;
+
+        /// <summary>
+        /// Indicates if the lyrics contain hate speech or discriminatory content
+        /// </summary>
+        public bool hate { get; set; } = false;
+
+        /// <summary>
+        /// Indicates if the lyrics contain sexual content
+        /// </summary>
+        public bool sexual { get; set; } = false;
+
+        /// <summary>
+        /// Indicates if the lyrics contain profanity or explicit language
+        /// </summary>
+        public bool profanity { get; set; } = false;
+
+        /// <summary>
+        /// Overall confidence score of the moderation results (0.0 to 1.0)
+        /// </summary>
+        public double confidence { get; set; } = 1.0;
+
+        /// <summary>
+        /// Additional context or reason for the moderation results
+        /// </summary>
+        public string? context { get; set; }
+
+        /// <summary>
+        /// Timestamp when the moderation was performed
+        /// </summary>
+        public DateTime moderatedAt { get; set; } = DateTime.UtcNow;
+    }
 #pragma warning restore CS8632 // The annotation for nullable reference types should only be used in code within a '#nullable' annotations context.
 }

@@ -38,20 +38,6 @@ namespace Alify.Models
     }
 
     /// <summary>
-    /// Represents the result of lyrics moderation.
-    /// </summary>
-    [DebuggerDisplay("Violence: {violence}, Hate: {hate}, Sexual: {sexual}, Profanity: {profanity}, SuitableForKids: {suitable_for_kids}")]
-    public class LyricsModerationResult
-    {
-        public bool violence { get; set; }
-        public bool hate { get; set; }
-        public bool sexual { get; set; }
-        public bool profanity { get; set; }
-        public bool suitable_for_kids { get; set; }
-        //public bool IsHarmful => violence || hate || sexual || profanity;
-    }
-
-    /// <summary>
     /// Represents a single line of lyrics with its metadata.
     /// </summary>
     [DebuggerDisplay("Line {LineNumber}: {Text} [{Artist}] [{Section}] IsAnnotation: {IsAnnotation}")]

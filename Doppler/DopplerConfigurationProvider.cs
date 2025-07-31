@@ -6,9 +6,9 @@ namespace Alify.Doppler;
 public class DopplerConfigurationProvider : ConfigurationProvider
 {
     private readonly string? _dopplerToken;
-    private const string DopplerApiUrl = "https://api.doppler.com/v3/configs/config/secrets/download?format=json";
-    private static readonly MemoryCache Cache = new(new MemoryCacheOptions());
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(10);
+    private const string _dopplerApiUrl = "https://api.doppler.com/v3/configs/config/secrets/download?format=json";
+    private static readonly MemoryCache _cache = new(new MemoryCacheOptions());
+    private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(10);
 
     public DopplerConfigurationProvider(string? dopplerToken)
     {
@@ -25,15 +25,15 @@ public class DopplerConfigurationProvider : ConfigurationProvider
 
         var cacheKey = $"DopplerSecrets_{_dopplerToken}";
 
-        Data = Cache.GetOrCreate(cacheKey, entry =>
+        Data = _cache.GetOrCreate(cacheKey, entry =>
         {
-            entry.AbsoluteExpirationRelativeToNow = CacheDuration;
+            entry.AbsoluteExpirationRelativeToNow = _cacheDuration;
             try
             {
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _dopplerToken);
 
-                var response = client.GetAsync(DopplerApiUrl).GetAwaiter().GetResult();
+                var response = client.GetAsync(_dopplerApiUrl).GetAwaiter().GetResult();
                 response.EnsureSuccessStatusCode();
 
                 var json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
