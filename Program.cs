@@ -3,8 +3,15 @@ using Alify.Doppler;
 using Alify.Models;
 using Alify.Services;
 using SpotifyAPI.Web;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Seq("http://localhost:5341")
+    .CreateLogger();
+builder.Host.UseSerilog();
 
 // Doppler integration: Read the token and add the custom configuration provider.
 // The token can come from user secrets, environment variables, or launchSettings.json.
