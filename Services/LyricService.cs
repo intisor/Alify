@@ -13,6 +13,7 @@ namespace Alify.Services
 {
     /// <summary>
     /// Service for fetching and moderating song lyrics.
+    /// Now using high-performance ILoggerMessage Source Generator for zero-allocation logging.
     /// </summary>
     [DebuggerDisplay("HasGeniusKey: {_apiKeys.Genius?.Token != null}, HasGeminiKey: {_apiKeys.Gemini?.ApiKey != null}, HasOpenRouterKey: {_apiKeys.OpenRouter?.ApiKey != null}, HasMistralKey: {_apiKeys.Mistral?.ApiKey != null}")]
     public class LyricService
@@ -20,6 +21,7 @@ namespace Alify.Services
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
         private readonly ApiKeys _apiKeys;
+        private readonly ILogger<LyricService> _logger;
 
         // Gemini API rate limiting (30 RPM = 1 request every 2 seconds)
         private static readonly SemaphoreSlim _geminiRateLimiter = new(1, 1);
@@ -32,11 +34,13 @@ namespace Alify.Services
         /// <param name="httpClient">The HTTP client for making requests.</param>
         /// <param name="apiKeys">The application configuration for accessing API keys.</param>
         /// <param name="cache">The memory cache for storing lyrics and moderation results.</param>
-        public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache)
+        /// <param name="logger">Logger for high-performance structured logging.</param>
+        public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache, ILogger<LyricService> logger)
         {
             _httpClient = httpClient;
             _apiKeys = apiKeys.Value;
             _cache = cache;
+            _logger = logger;
         }
 
         /// <summary>
@@ -58,11 +62,13 @@ namespace Alify.Services
             if (!string.IsNullOrWhiteSpace(geniusLyrics))
             {
                 _cache.Set(cacheKey, geniusLyrics, TimeSpan.FromHours(24));
-                Console.WriteLine($"Lyrics found for: {title} by {artist}");
+                // HIGH-PERFORMANCE LOGGING: Zero allocation, compile-time optimized
+                _logger.LogLyricsFound(title, artist);
             }
             else
             {
-                Console.WriteLine($"No lyrics found for: {title} by {artist}");
+                // HIGH-PERFORMANCE LOGGING: Zero allocation, structured parameters
+                _logger.LogLyricsNotFound(title, artist);
             }
 
             return geniusLyrics;
@@ -81,7 +87,8 @@ namespace Alify.Services
                 var geniusKey = _apiKeys.Genius?.Token;
                 if (string.IsNullOrEmpty(geniusKey))
                 {
-                    Console.WriteLine("Genius API token is not configured.");
+                    // HIGH-PERFORMANCE LOGGING: No string interpolation or boxing
+                    _logger.LogGeniusTokenMissing();
                     return null;
                 }
 
@@ -93,7 +100,8 @@ namespace Alify.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"Genius search failed: {response.StatusCode}");
+                    // HIGH-PERFORMANCE LOGGING: Enum passed directly, no boxing
+                    _logger.LogGeniusSearchFailed(response.StatusCode, title, artist);
                     return null;
                 }
 
@@ -129,7 +137,8 @@ namespace Alify.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error fetching lyrics from Genius: {ex.Message}");
+                // HIGH-PERFORMANCE LOGGING: Exception + structured parameters, zero allocation
+                _logger.LogGeniusError(ex, title, artist);
                 return null;
             }
         }
@@ -176,7 +185,8 @@ namespace Alify.Services
             {
                 if (string.IsNullOrEmpty(providerApiKey))
                 {
-                    Console.WriteLine($"{provider} API key is not configured.");
+                    // HIGH-PERFORMANCE LOGGING: String passed directly, no allocation
+                    _logger.LogModerationApiKeyMissing(provider);
                     continue;
                 }
 
@@ -196,29 +206,34 @@ namespace Alify.Services
                         if (result != null)
                         {
                             _cache.Set(cacheKey, result, TimeSpan.FromHours(24));
-                            Console.WriteLine($"{provider} moderation successful (attempt {attempt})");
+                            // HIGH-PERFORMANCE LOGGING: No boxing of int values
+                            _logger.LogModerationSuccess(provider, attempt);
                             return result;
                         }
 
                         if (attempt == maxRetries)
                         {
-                            Console.WriteLine($"{provider} API failed after {maxRetries} attempts. Trying next provider...");
+                            // HIGH-PERFORMANCE LOGGING: Parameters passed efficiently
+                            _logger.LogModerationProviderFailed(provider, maxRetries);
                             break;
                         }
                     }
                     catch (OperationCanceledException ex)
                     {
-                        Console.WriteLine($"Error with {provider} (attempt {attempt}): Request timed out. {ex.Message}");
+                        // HIGH-PERFORMANCE LOGGING: String + int parameters, optimized
+                        _logger.LogModerationTimeout(provider, attempt, ex.Message);
                         if (attempt == maxRetries) break;
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode.HasValue && IsRetryable(ex.StatusCode.Value))
                     {
-                        Console.WriteLine($"Error with {provider} (attempt {attempt}): Rate limit or server error. {ex.Message}");
+                        // HIGH-PERFORMANCE LOGGING: Nullable enum handled efficiently
+                        _logger.LogModerationRateLimit(provider, attempt, ex.StatusCode, ex.Message);
                         if (attempt == maxRetries) break;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error with {provider} (attempt {attempt}): {ex.Message}");
+                        // HIGH-PERFORMANCE LOGGING: Exception + structured parameters
+                        _logger.LogModerationUnexpectedError(ex, provider, attempt);
                         if (attempt == maxRetries) break;
                     }
                     finally
@@ -230,13 +245,15 @@ namespace Alify.Services
                     if (attempt < maxRetries)
                     {
                         var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        Console.WriteLine($"Waiting {delay.TotalSeconds}s before retry...");
+                        // HIGH-PERFORMANCE LOGGING: Double passed directly, no boxing
+                        _logger.LogModerationRetryDelay(delay.TotalSeconds);
                         await Task.Delay(delay);
                     }
                 }
             }
 
-            Console.WriteLine("All providers failed to process the request.");
+            // HIGH-PERFORMANCE LOGGING: Simple method call, no parameters
+            _logger.LogModerationAllProvidersFailed();
             return null;
         }
 
@@ -276,7 +293,8 @@ namespace Alify.Services
                     // This will throw HttpRequestException, which is caught by the caller for retry/fallback.
                     response.EnsureSuccessStatusCode();
                 }
-                Console.WriteLine($"{provider} API request failed with non-retryable status {response.StatusCode}.");
+                // HIGH-PERFORMANCE LOGGING: Enum passed directly, no conversion
+                _logger.LogModerationNonRetryableError(provider, response.StatusCode);
                 return null;
             }
 
@@ -289,7 +307,7 @@ namespace Alify.Services
         /// </summary>
         /// <param name="responseString">The JSON response string.</param>
         /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
-        private static LyricsModerationResult? ParseOpenAIResponse(string responseString)
+        private LyricsModerationResult? ParseOpenAIResponse(string responseString)
         {
             try
             {
@@ -312,7 +330,8 @@ namespace Alify.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to parse OpenAI-style response: {ex.Message}");
+                // HIGH-PERFORMANCE LOGGING: Exception + provider parameter, optimized
+                _logger.LogModerationParseError(ex, "OpenAI-compatible");
                 return null;
             }
         }
@@ -330,7 +349,7 @@ namespace Alify.Services
         /// </summary>
         /// <param name="responseString">The JSON response string.</param>
         /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
-        private static LyricsModerationResult? ParseGeminiResponse(string responseString)
+        private LyricsModerationResult? ParseGeminiResponse(string responseString)
         {
             try
             {
@@ -349,7 +368,8 @@ namespace Alify.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to parse Gemini response: {ex.Message}");
+                // HIGH-PERFORMANCE LOGGING: Exception + provider parameter, zero allocation
+                _logger.LogModerationParseError(ex, "Gemini");
                 return null;
             }
         }

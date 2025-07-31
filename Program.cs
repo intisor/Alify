@@ -15,6 +15,33 @@ builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddOutputCache();
 
+// Configure HttpLogging for automatic HTTP request/response logging
+builder.Services.AddHttpLogging(options =>
+{
+    // Log request and response details for debugging external APIs
+    options.LoggingFields = Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod |
+                           Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath |
+                           Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode |
+                           Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.Duration |
+                           Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestHeaders |
+                           Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseHeaders;
+
+    // Security: Exclude sensitive headers to prevent API key exposure
+    options.RequestHeaders.Add("User-Agent");
+    options.RequestHeaders.Add("Accept");
+    options.RequestHeaders.Add("Content-Type");
+    // Explicitly exclude Authorization headers to protect API keys
+    
+    options.ResponseHeaders.Add("Content-Type");
+    options.ResponseHeaders.Add("Cache-Control");
+    
+    // Exclude request/response bodies initially (can enable later for specific debugging)
+    // This prevents large payloads and sensitive data from being logged
+    
+    // Set appropriate log level (Information for development, Warning for production)
+    options.CombineLogs = true; // Combine request/response in single log entry
+});
+
 //builder.Services.AddSignalR(); // Add SignalR support
 builder.Services.AddResponseCompression(options =>
 {
@@ -55,6 +82,9 @@ if (!app.Environment.IsDevelopment())
 	app.UseHsts();
 	app.UseResponseCompression();
 }
+
+// Add HttpLogging middleware early in the pipeline to capture all HTTP traffic
+app.UseHttpLogging();
 
 app.UseOutputCache();
 

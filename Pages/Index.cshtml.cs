@@ -16,10 +16,7 @@ public class IndexModel : PageModel
 
     public void OnGet([FromQuery] string? error, [FromQuery] string? success)
     {
-        // Check if user is already authenticated
         IsAuthenticated = _spotifyService.IsAuthenticated();
-        
-        // Get messages from query parameters or TempData
         ErrorMessage = error ?? TempData["ErrorMessage"] as string;
         SuccessMessage = success ?? TempData["SuccessMessage"] as string;
     }

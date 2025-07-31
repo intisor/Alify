@@ -8,52 +8,31 @@ using SpotifyAPI.Web;
 
 namespace Alify.Controllers
 {
-    /// <summary>
-    /// Enhanced Lyrics API Controller demonstrating Method Injection patterns.
-    /// 
-    /// Architecture Benefits:
-    /// 1. Constructor injection for core, always-needed dependencies
-    /// 2. Method injection for operation-specific services
-    /// 3. Reduced memory footprint - services resolved on-demand
-    /// 4. Better testability - each method can be tested with specific service mocks
-    /// 5. Improved performance - services only created when actually used
-    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     public class LyricsController : ControllerBase
     {
-        // CORE DEPENDENCIES: Always needed, injected via constructor
         private readonly SpotifyService _spotifyService;
         private readonly ILogger<LyricsController> _logger;
 
-        /// <summary>
-        /// Constructor only includes core dependencies used across multiple actions.
-        /// Benefits: Reduced constructor complexity, cleaner dependency management.
-        /// </summary>
         public LyricsController(SpotifyService spotifyService, ILogger<LyricsController> logger)
         {
             _spotifyService = spotifyService;
             _logger = logger;
         }
 
-        /// <summary>
-        /// Get lyrics for currently playing track using method injection.
-        /// Benefits: LyricService only resolved when actually fetching lyrics.
-        /// </summary>
         [HttpGet("current")]
-        [OutputCache(Duration = 30)] // Cache for 30 seconds for performance
+        [OutputCache(Duration = 30)]
         public async Task<ActionResult<object>> GetCurrentTrackLyrics()
         {
-            // Check authentication first (using core service)
             if (!_spotifyService.IsAuthenticated())
             {
-                _logger.LogWarning("Lyrics API accessed without authentication");
+                _logger.LogUnauthenticatedLyricsAccess();
                 return Unauthorized(new { error = "Authentication required" });
             }
 
             try
             {
-                // METHOD INJECTION: Get Spotify client and lyrics service only when needed
                 return await this.WithServiceAsync<LyricService, ActionResult<object>>(async lyricService =>
                 {
                     var spotifyClient = await _spotifyService.GetSpotifyClientAsync();
@@ -70,12 +49,8 @@ namespace Alify.Controllers
 
                     var track = playbackInfo.CurrentlyPlaying.FullTrack;
                     var artistName = track.Artists.FirstOrDefault()?.Name ?? "Unknown";
-
-                    // Fetch lyrics using method-injected service
                     var lyrics = await lyricService.GetLyricsAsync(artistName, track.Name);
                     
-                    _logger.LogInformation("Lyrics requested for: {Artist} - {Track}", artistName, track.Name);
-
                     return Ok(new
                     {
                         track = new
@@ -84,24 +59,20 @@ namespace Alify.Controllers
                             artist = artistName,
                             album = track.Album.Name
                         },
-                        lyrics = lyrics ?? "No lyrics found",
+                        lyrics = lyrics ?? "Lyrics not found",
                         hasLyrics = !string.IsNullOrEmpty(lyrics)
                     });
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching current track lyrics");
+                _logger.LogCurrentTrackLyricsError(ex);
                 return StatusCode(500, new { error = "Internal server error" });
             }
         }
 
-        /// <summary>
-        /// Analyze lyrics structure using multiple method-injected services.
-        /// Benefits: Services only resolved for this specific analysis operation.
-        /// </summary>
         [HttpGet("analyze")]
-        [OutputCache(Duration = 60)] // Longer cache for analysis results
+        [OutputCache(Duration = 60)]
         public async Task<ActionResult<object>> AnalyzeLyrics()
         {
             if (!_spotifyService.IsAuthenticated())
@@ -111,7 +82,6 @@ namespace Alify.Controllers
 
             try
             {
-                // METHOD INJECTION: Chain multiple services for complex analysis
                 return await this.WithServiceAsync<LyricService, ActionResult<object>>(async lyricService =>
                 {
                     var spotifyClient = await _spotifyService.GetSpotifyClientAsync();
@@ -135,21 +105,15 @@ namespace Alify.Controllers
                         return NotFound(new { message = "No lyrics found for analysis" });
                     }
 
-                    // METHOD INJECTION: Resolve ArtistLyricService for parsing and analysis
                     return await this.WithServiceAsync<ArtistLyricService, ActionResult<object>>(async artistLyricService =>
                     {
                         var mapping = artistLyricService.ParseLyricsWithArtistMapping(lyrics, artistName);
                         var artists = mapping.GetArtists();
                         var sections = mapping.GetSections();
-
-                        // Build detailed analysis
                         var artistLineMapping = artistLyricService.GetArtistLineMapping(lyrics);
                         var sectionLineMapping = artistLyricService.GetSectionLineMapping(lyrics);
 
-                        _logger.LogInformation("Lyrics analysis completed: {ArtistCount} artists, {SectionCount} sections",
-                                             artists.Count, sections.Count);
-
-                        await Task.CompletedTask; // Placeholder for any async analysis
+                        _logger.LogLyricsAnalysisCompleted(artists.Count, sections.Count);
 
                         return Ok(new
                         {
@@ -183,10 +147,6 @@ namespace Alify.Controllers
             }
         }
 
-        /// <summary>
-        /// Get lyrics with moderation using conditional method injection.
-        /// Benefits: Moderation service only resolved when actually needed.
-        /// </summary>
         [HttpGet("moderated")]
         [OutputCache(Duration = 30)]
         public async Task<ActionResult<object>> GetModeratedLyrics([FromQuery] bool includeModerationDetails = false)
@@ -221,15 +181,13 @@ namespace Alify.Controllers
                         return NotFound(new { message = "No lyrics found" });
                     }
 
-                    // CONDITIONAL METHOD INJECTION: Only moderate lyrics if requested
                     LyricsModerationResult? moderationResult = null;
                     if (includeModerationDetails)
                     {
                         moderationResult = await lyricService.ModerateLyricsAsync(lyrics);
-                        _logger.LogInformation("Lyrics moderation performed for: {Artist} - {Track}", artistName, track.Name);
+                        _logger.LogLyricsModerationPerformed(artistName, track.Name);
                     }
 
-                    // Create response with consistent object structure
                     object response;
                     if (includeModerationDetails)
                     {
@@ -284,10 +242,6 @@ namespace Alify.Controllers
             }
         }
 
-        /// <summary>
-        /// Clear lyrics cache using method injection for cache services.
-        /// Benefits: Cache service only resolved when actually clearing cache.
-        /// </summary>
         [HttpPost("cache/clear")]
         public ActionResult ClearLyricsCache()
         {
@@ -298,25 +252,16 @@ namespace Alify.Controllers
 
             try
             {
-                // METHOD INJECTION: Resolve cache service only for cache operations
                 this.WithService<IMemoryCache>(cache =>
                 {
-                    // Clear lyrics-related cache entries
-                    var cacheKeys = new[]
-                    {
-                        "CurrentlyPlaying",
-                        "Queue"
-                    };
-
+                    var cacheKeys = new[] { "CurrentlyPlaying", "Queue" };
                     foreach (var key in cacheKeys)
                     {
                         cache.Remove(key);
                     }
-
                     _logger.LogInformation("Lyrics cache cleared");
                 });
 
-                // Also clear Spotify request cache
                 this.WithService<SpotifyRequestCache>(requestCache =>
                 {
                     requestCache.ClearCache();
@@ -331,12 +276,8 @@ namespace Alify.Controllers
             }
         }
 
-        /// <summary>
-        /// Get queue with lyrics preview using performance-optimized method injection.
-        /// Benefits: Services resolved on-demand, better memory management for bulk operations.
-        /// </summary>
         [HttpGet("queue")]
-        [OutputCache(Duration = 15)] // Shorter cache for dynamic queue data
+        [OutputCache(Duration = 15)]
         public async Task<ActionResult<object>> GetQueueWithLyrics([FromQuery] int limit = 5)
         {
             if (!_spotifyService.IsAuthenticated())
@@ -365,7 +306,6 @@ namespace Alify.Controllers
                         return Ok(new { queue = new object[0], message = "Queue is empty" });
                     }
 
-                    // Process queue items with lyrics preview (performance optimized)
                     var queueWithLyrics = new List<object>();
                     var queueItems = playbackInfo.Queue.Take(limit);
 
@@ -373,8 +313,6 @@ namespace Alify.Controllers
                     {
                         var track = queueTrack.FullTrack;
                         var artistName = track.Artists.FirstOrDefault()?.Name ?? "Unknown";
-                        
-                        // Get lyrics preview (first 200 characters for performance)
                         var fullLyrics = await lyricService.GetLyricsAsync(artistName, track.Name);
                         var lyricsPreview = string.IsNullOrEmpty(fullLyrics) 
                             ? "No lyrics available"
@@ -393,7 +331,7 @@ namespace Alify.Controllers
                         });
                     }
 
-                    _logger.LogInformation("Queue with lyrics retrieved: {Count} tracks", queueWithLyrics.Count);
+                    _logger.LogQueueWithLyricsRetrieved(queueWithLyrics.Count);
 
                     return Ok(new
                     {
