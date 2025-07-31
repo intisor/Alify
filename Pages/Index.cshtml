@@ -17,19 +17,20 @@
         <div class="mb-4 px-4 py-2 rounded bg-green-100 text-green-700">@Model.SuccessMessage</div>
     }
 
-    <div class="flex gap-4 mt-6">
+    <div class="flex flex-col md:flex-row gap-2 justify-center mt-6">
         @if (Model.IsAuthenticated)
         {
-            <form method="post">
-                <button type="submit" asp-page-handler="LogoutAsync" class="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition">Logout</button>
+            <a class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition" href="/Dashboard">Go to Dashboard</a>
+            <a class="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition" href="/ProductionDemo">Production Demo</a>
+            <form method="post" asp-page-handler="Logout" class="inline">
+                <button type="submit" class="px-4 py-2 rounded border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 font-semibold transition">Logout</button>
             </form>
-            <a href="/Dashboard" class="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">Go to Dashboard</a>
         }
         else
         {
-            <form method="get">
-                <button type="submit" asp-page-handler="Login" class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition">Login with Spotify</button>
-            </form>
+            <a class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition text-lg flex items-center gap-2" asp-page-handler="Login">
+                <i class="fab fa-spotify"></i> Login with Spotify
+            </a>
         }
     </div>
 </div>

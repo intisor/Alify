@@ -41,6 +41,12 @@ namespace Alify.Services
             _apiKeys = apiKeys.Value;
             _cache = cache;
             _logger = logger;
+
+            // Log API key status for debugging
+            _logger.LogInformation("Genius API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Genius?.Token) ? "Not Set" : "Set");
+            _logger.LogInformation("Gemini API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Gemini?.ApiKey) ? "Not Set" : "Set");
+            _logger.LogInformation("OpenRouter API Key: {Status}", string.IsNullOrEmpty(_apiKeys.OpenRouter?.ApiKey) ? "Not Set" : "Set");
+            _logger.LogInformation("Mistral API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Mistral?.ApiKey) ? "Not Set" : "Set");
         }
 
         /// <summary>
@@ -177,15 +183,15 @@ namespace Alify.Services
             var providers = new List<(string Provider, string Endpoint, string? ApiKey, string Model)>
             {
                 ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", _apiKeys.Gemini?.ApiKey, "gemini-1.5-flash"),
-                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "mistralai/mixtral-8x7b-instruct:free"),
+                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "meta-llama/llama-3.1-8b-instruct:free"),
                 ("Mistral", "https://api.mistral.ai/v1/chat/completions", _apiKeys.Mistral?.ApiKey, "mistral-moderation-2411")
             };
 
             foreach (var (provider, endpoint, providerApiKey, model) in providers)
             {
+                _logger.LogInformation("Moderation attempt using {Provider} with API Key: {Status}", provider, string.IsNullOrEmpty(providerApiKey) ? "Not Set" : "Set");
                 if (string.IsNullOrEmpty(providerApiKey))
                 {
-                    // HIGH-PERFORMANCE LOGGING: String passed directly, no allocation
                     _logger.LogModerationApiKeyMissing(provider);
                     continue;
                 }
@@ -206,33 +212,28 @@ namespace Alify.Services
                         if (result != null)
                         {
                             _cache.Set(cacheKey, result, TimeSpan.FromHours(24));
-                            // HIGH-PERFORMANCE LOGGING: No boxing of int values
                             _logger.LogModerationSuccess(provider, attempt);
                             return result;
                         }
-
-                        if (attempt == maxRetries)
-                        {
-                            // HIGH-PERFORMANCE LOGGING: Parameters passed efficiently
-                            _logger.LogModerationProviderFailed(provider, maxRetries);
-                            break;
-                        }
-                    }
-                    catch (OperationCanceledException ex)
-                    {
-                        // HIGH-PERFORMANCE LOGGING: String + int parameters, optimized
-                        _logger.LogModerationTimeout(provider, attempt, ex.Message);
-                        if (attempt == maxRetries) break;
                     }
                     catch (HttpRequestException ex) when (ex.StatusCode.HasValue && IsRetryable(ex.StatusCode.Value))
                     {
-                        // HIGH-PERFORMANCE LOGGING: Nullable enum handled efficiently
                         _logger.LogModerationRateLimit(provider, attempt, ex.StatusCode, ex.Message);
+                        // If Gemini returns TooManyRequests, break and try next provider
+                        if (provider == "Gemini" && ex.StatusCode == HttpStatusCode.TooManyRequests)
+                        {
+                            _logger.LogModerationProviderFailed(provider, attempt);
+                            break;
+                        }
+                        if (attempt == maxRetries) break;
+                    }
+                    catch (OperationCanceledException ex)
+                    {
+                        _logger.LogModerationTimeout(provider, attempt, ex.Message);
                         if (attempt == maxRetries) break;
                     }
                     catch (Exception ex)
                     {
-                        // HIGH-PERFORMANCE LOGGING: Exception + structured parameters
                         _logger.LogModerationUnexpectedError(ex, provider, attempt);
                         if (attempt == maxRetries) break;
                     }
@@ -245,14 +246,12 @@ namespace Alify.Services
                     if (attempt < maxRetries)
                     {
                         var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        // HIGH-PERFORMANCE LOGGING: Double passed directly, no boxing
                         _logger.LogModerationRetryDelay(delay.TotalSeconds);
                         await Task.Delay(delay);
                     }
                 }
             }
 
-            // HIGH-PERFORMANCE LOGGING: Simple method call, no parameters
             _logger.LogModerationAllProvidersFailed();
             return null;
         }
@@ -288,12 +287,12 @@ namespace Alify.Services
 
             if (!response.IsSuccessStatusCode)
             {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Provider {Provider} failed with {StatusCode}: {ErrorContent}", provider, response.StatusCode, errorContent);
                 if (IsRetryable(response.StatusCode))
                 {
-                    // This will throw HttpRequestException, which is caught by the caller for retry/fallback.
                     response.EnsureSuccessStatusCode();
                 }
-                // HIGH-PERFORMANCE LOGGING: Enum passed directly, no conversion
                 _logger.LogModerationNonRetryableError(provider, response.StatusCode);
                 return null;
             }

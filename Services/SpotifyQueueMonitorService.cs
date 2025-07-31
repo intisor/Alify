@@ -71,8 +71,7 @@ namespace Alify.Services
                 using var scope = _serviceProvider.CreateScope();
                 var spotifyService = scope.ServiceProvider.GetRequiredService<SpotifyService>();
 
-                // Retrieve Spotify token from a persistent store (e.g., IMemoryCache, database, or distributed cache)
-                // Example: using IMemoryCache for demonstration; replace with your actual persistent store logic
+                // Retrieve Spotify token from IMemoryCache
                 if (!_cache.TryGetValue("SpotifyAuthToken", out string? spotifyToken) || string.IsNullOrEmpty(spotifyToken))
                 {
                     if (DateTime.UtcNow - _lastAuthWarning > _authWarningCooldown)
