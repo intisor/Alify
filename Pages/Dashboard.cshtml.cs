@@ -102,10 +102,9 @@ namespace Alify.Pages
             {
                 await this.WithServiceAsync<SpotifyQueueMonitorService>(async monitorService =>
                 {
-                    monitorService.StartMonitoring();
+                    await monitorService.StartMonitoringAsync();
                     StatusMessage = "Queue monitoring started successfully.";
                     HighPerformanceLogging.LogMonitoringStarted(_logger);
-                    await Task.CompletedTask;
                 });
             }
             catch (Exception ex)
@@ -125,7 +124,7 @@ namespace Alify.Pages
                 var monitorService = this.ResolveService<SpotifyQueueMonitorService>();
                 if (monitorService.IsMonitoring)
                 {
-                    monitorService.StopMonitoring();
+                    await monitorService.StopMonitoringAsync();
                     StatusMessage = "Queue monitoring stopped successfully.";
                     HighPerformanceLogging.LogMonitoringStopped(_logger);
                 }

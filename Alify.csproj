@@ -15,6 +15,8 @@
     <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
     <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.2.1" />
+    <PackageReference Include="TickerQ" Version="2.3.0" />
+    <PackageReference Include="TickerQ.Dashboard" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>

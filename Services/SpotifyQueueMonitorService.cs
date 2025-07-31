@@ -1,17 +1,14 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
-using SpotifyAPI.Web;
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using TickerQ.Utilities.Base;
+using TickerQ.Utilities.Interfaces.Managers;
+using TickerQ.Utilities.Models.Ticker;
+
 
 namespace Alify.Services
 {
     [DebuggerDisplay("IsMonitoring: {_isMonitoring}, AuthWarningCooldown: {_authWarningCooldown.TotalMinutes}min")]
-    public class SpotifyQueueMonitorService : BackgroundService
+    public class SpotifyQueueMonitorService
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<SpotifyQueueMonitorService> _logger;
@@ -19,6 +16,8 @@ namespace Alify.Services
         private bool _isMonitoring;
         private DateTime _lastAuthWarning = DateTime.MinValue;
         private readonly TimeSpan _authWarningCooldown = TimeSpan.FromMinutes(5);
+        private readonly ITimeTickerManager<TimeTicker> _timeTickerManager;
+        private Guid? _currentTickerId;
 
         public SpotifyQueueMonitorService(
             IServiceProvider serviceProvider,
@@ -28,39 +27,44 @@ namespace Alify.Services
             _serviceProvider = serviceProvider;
             _logger = logger;
             _cache = cache;
+            _timeTickerManager = serviceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
         }
 
-        public void StartMonitoring() => SetMonitoringStatus(true);
-        public void StopMonitoring() => SetMonitoringStatus(false);
         public bool IsMonitoring => _isMonitoring;
 
-        private void SetMonitoringStatus(bool isRunning)
+        public async Task StartMonitoringAsync()
         {
-            _isMonitoring = isRunning;
-            _cache.Set("MonitoringStatus", isRunning ? "Running" : "Stopped", TimeSpan.FromHours(1));
-            _logger.LogInformation($"Spotify queue monitoring {(isRunning ? "started" : "stopped")}");
-        }
-
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            _logger.LogInformation("Spotify Queue Monitor Service started.");
-            while (!stoppingToken.IsCancellationRequested)
+            var ticker = new TimeTicker
             {
-                if (_isMonitoring)
-                {
-                    await CheckQueueAsync();
-                    await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
-                }
-                else
-                {
-                    // Exit the loop if not monitoring
-                    break;
-                }
-            }
-            _logger.LogInformation("Spotify Queue Monitor Service stopped.");
+                Function = "CheckQueueAsync",
+                ExecutionTime = DateTime.UtcNow.AddSeconds(3),
+                Description = "Spotify Queue Monitoring",
+                Retries = 3,
+                RetryIntervals = new[] { 10, 20, 30 }
+            };
+
+            await _timeTickerManager.AddAsync(ticker);
+            _currentTickerId = ticker.Id;
+            _isMonitoring = true;
+            _cache.Set("MonitoringStatus", "Running", TimeSpan.FromHours(1));
+            _logger.LogInformation("Spotify queue monitoring started.");
         }
 
-        private async Task CheckQueueAsync()
+        public async Task StopMonitoringAsync()
+        {
+            if (_currentTickerId.HasValue)
+            {
+                await _timeTickerManager.DeleteAsync(_currentTickerId.Value);
+                _currentTickerId = null;
+            }
+            _isMonitoring = false;
+            _cache.Set("MonitoringStatus", "Stopped", TimeSpan.FromHours(1));
+            _logger.LogInformation("Spotify queue monitoring stopped.");
+        }
+
+        // Fix cron expression to be valid for TickerQ (5 fields: minute, hour, day, month, day-of-week)
+        [TickerFunction("CheckQueueAsync", "*/3 * * * *")]
+        public async Task CheckQueueAsync()
         {
             try
             {

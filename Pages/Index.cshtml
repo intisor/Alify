@@ -10,15 +10,17 @@
     
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
-        <div class="alert alert-danger" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
             <strong>Error:</strong> @Model.ErrorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
-    
+
     @if (!string.IsNullOrEmpty(Model.SuccessMessage))
     {
-        <div class="alert alert-success" role="alert">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
             @Model.SuccessMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     
@@ -26,7 +28,7 @@
     {
         <div class="card mx-auto" style="max-width: 500px;">
             <div class="card-body">
-                <h5 class="card-title text-success">✅ Connected to Spotify</h5>
+                <h5 class="card-title text-success" >✅ Connected to Spotify</h5>
                 <p class="card-text">You're already logged in to Spotify. You can access the dashboard or logout.</p>
                 <div class="d-grid gap-2 d-md-flex justify-content-md-center">
                     <a class="btn btn-success" href="/Dashboard">Go to Dashboard</a>

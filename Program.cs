@@ -2,14 +2,16 @@ using Alify.Controllers;
 using Alify.Doppler;
 using Alify.Models;
 using Alify.Services;
-using SpotifyAPI.Web;
 using Serilog;
+using SpotifyAPI.Web;
+using TickerQ.Dashboard.DependencyInjection;
+using TickerQ.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
-    .WriteTo.Seq("http://localhost:5341")
+    .WriteTo.Console()
     .CreateLogger();
 builder.Host.UseSerilog();
 
@@ -77,8 +79,16 @@ builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring
 builder.Services.AddSingleton<SpotifyQueueMonitorService>();
-builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
-    provider.GetRequiredService<SpotifyQueueMonitorService>());
+//builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
+//    provider.GetRequiredService<SpotifyQueueMonitorService>());
+
+// Add TickerQ services
+builder.Services.AddTickerQ(opt =>
+{
+    opt.SetInstanceIdentifier("SpotifyQueueMonitor");
+	opt.AddDashboard(basePath: "/tickerq-dashboard");
+	opt.AddDashboardBasicAuth();
+});
 
 var app = builder.Build();
 
@@ -102,5 +112,8 @@ app.UseSession(); // enable session usage
 app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
+
+// Add TickerQ middleware
+app.UseTickerQ();
 
 app.Run();

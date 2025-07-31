@@ -32,14 +32,14 @@ namespace Alify.Controllers
         /// </summary>
         /// <returns>A message indicating that monitoring has started, or a bad request if not authenticated.</returns>
         [HttpPost("start-monitor")]
-        public IActionResult StartMonitor()
+        public async Task<IActionResult> StartMonitor()
         {
             if (!_spotifyService.IsAuthenticated())
             {
                 return BadRequest("Authentication required. Please login to Spotify first.");
             }
 
-            _monitorService.StartMonitoring();
+            await _monitorService.StartMonitoringAsync();
             return Ok("Queue monitoring started.");
         }
 
@@ -48,9 +48,9 @@ namespace Alify.Controllers
         /// </summary>
         /// <returns>A message indicating that monitoring has stopped.</returns>
         [HttpPost("stop-monitor")]
-        public IActionResult StopMonitor()
+        public async Task<IActionResult> StopMonitor()
         {
-            _monitorService.StopMonitoring();
+            await _monitorService.StopMonitoringAsync();
             return Ok("Queue monitoring stopped.");
         }
 
@@ -61,7 +61,7 @@ namespace Alify.Controllers
         [HttpGet("monitor-status")]
         public IActionResult GetMonitorStatus()
         {
-            return Ok(new { 
+            return Ok(new {
                 IsMonitoring = _monitorService.IsMonitoring,
                 Status = _monitorService.IsMonitoring ? "Running" : "Stopped"
             });

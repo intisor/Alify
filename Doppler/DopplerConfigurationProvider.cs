@@ -8,7 +8,7 @@ public class DopplerConfigurationProvider : ConfigurationProvider
     private readonly string? _dopplerToken;
     private const string _dopplerApiUrl = "https://api.doppler.com/v3/configs/config/secrets/download?format=json";
     private static readonly MemoryCache _cache = new(new MemoryCacheOptions());
-    private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan _cacheDuration = TimeSpan.FromHours(1);
 
     public DopplerConfigurationProvider(string? dopplerToken)
     {

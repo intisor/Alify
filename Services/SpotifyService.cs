@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Alify.Services;
+using Serilog;
 
 /// <summary>
 /// Service for interacting with the Spotify API.
@@ -45,14 +46,20 @@ public class SpotifyService
         _requestCache = requestCache;
     }
 
-    /// <summary>
-    /// Gets the current user's session to store authentication tokens and state.
-    /// </summary>
-    /// <remarks>
-    /// Using the session allows maintaining user-specific Spotify authentication 
-    /// without requiring a database, but tokens will be lost if the session expires.
-    /// </remarks>
-    private ISession Session => _httpContextAccessor.HttpContext!.Session;
+    // Defensive null check for HttpContext and Session
+    private ISession Session
+    {
+        get
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext == null)
+                throw new InvalidOperationException("HttpContext is null. Ensure this service is used within a valid HTTP request scope.");
+            var session = httpContext.Session;
+            if (session == null)
+                throw new InvalidOperationException("Session is null. Ensure session middleware is configured and enabled.");
+            return session;
+        }
+    }
 
     /// <summary>
     /// Starts the Spotify authentication process by generating a login URL.
@@ -315,13 +322,25 @@ public class SpotifyService
     public async Task SkipIfFlaggedAsync(SpotifyClient spotify)
     {
         var playbackInfo = await GetCurrentPlaybackInfoAsync(spotify);
-        if (playbackInfo?.CurrentlyPlaying?.IsFlagged == true)
+        if (playbackInfo == null)
         {
-            // Skip to the next track if the current one is flagged
+            Log.Logger.Warning("SkipIfFlaggedAsync: No playback info available.");
+            return;
+        }
+        if (playbackInfo.CurrentlyPlaying == null)
+        {
+            Log.Logger.Warning("SkipIfFlaggedAsync: No track is currently playing.");
+            return;
+        }
+        if (playbackInfo.CurrentlyPlaying.IsFlagged)
+        {
+            Log.Logger.Information("SkipIfFlaggedAsync: Skipping flagged track: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
             await spotify.Player.SkipNext();
-            
-            // Clear the cache to force a refresh of playback info after skipping
             _requestCache.ClearCache();
+        }
+        else
+        {
+            Log.Logger.Information("SkipIfFlaggedAsync: Track is not flagged: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
         }
     }
 
