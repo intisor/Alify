@@ -107,7 +107,7 @@ public class SpotifyService
     /// This is called when the user is redirected back from Spotify's authorization page.
     /// It verifies the state parameter to prevent CSRF attacks and exchanges the authorization code for tokens.
     /// </remarks>
-    public async Task<bool> UpdateAuthAsync(string code, string state)
+    public async Task<bool> UpdateAuthAsync(string code, string state)      
     {
         // Verify state to prevent cross-site request forgery attacks
         var storedState = Session.GetString("SpotifyState");
@@ -128,38 +128,50 @@ public class SpotifyService
         ));
 
         // Store tokens and expiry date in the session for future use
-        // The access token is short-lived (1 hour) while the refresh token is long-lived
         Session.SetString("SpotifyAccessToken", tokenResponse.AccessToken);
         Session.SetString("SpotifyRefreshToken", tokenResponse.RefreshToken ?? "");
         Session.SetString("SpotifyTokenExpiry", DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn).ToString("o"));
+
+        // Store the access token in IMemoryCache for background services
+        _cache.Set("SpotifyAuthToken", tokenResponse.AccessToken, TimeSpan.FromHours(1));
+
         return true;
     }
 
     /// <summary>
     /// Gets a SpotifyClient instance for making API calls. Refreshes the access token if it's expired.
     /// </summary>
+    /// <param name="accessTokenOverride">Optional access token to use instead of session/cached token. Used for background services.</param>
     /// <returns>A configured SpotifyClient, or null if authentication fails.</returns>
     /// <remarks>
     /// This is the main entry point for making Spotify API calls. It handles token refresh
     /// automatically so other methods don't need to worry about authentication details.
     /// </remarks>
-    public async Task<SpotifyClient?> GetSpotifyClientAsync()
+    public async Task<SpotifyClient?> GetSpotifyClientAsync(string? accessTokenOverride = null)
     {
-        var accessToken = Session.GetString("SpotifyAccessToken");
+        string? accessToken = accessTokenOverride;
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            // Try session first (for HTTP context)
+            try
+            {
+                accessToken = Session.GetString("SpotifyAccessToken");
+            }
+            catch (InvalidOperationException)
+            {
+                // If no HTTP context, fallback to IMemoryCache
+                _cache.TryGetValue("SpotifyAuthToken", out accessToken);
+            }
+        }
         if (string.IsNullOrEmpty(accessToken))
         {
             return null;
         }
-
-        // Refresh the token if it's about to expire (within 5 minutes)
-        // This proactive approach prevents API calls from failing due to token expiration
-        if (IsTokenExpired() && !await RefreshTokenAsync())
+        // No refresh logic for background (cache) tokens, only for session tokens
+        if (accessTokenOverride == null && IsTokenExpired() && !await RefreshTokenAsync())
         {
             return null;
         }
-
-        // Get the potentially refreshed access token
-        accessToken = Session.GetString("SpotifyAccessToken");
         return new SpotifyClient(accessToken!);
     }
 

@@ -78,7 +78,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring
-builder.Services.AddSingleton<SpotifyQueueMonitorService>();
+builder.Services.AddScoped<SpotifyQueueMonitorService>();
 //builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
 //    provider.GetRequiredService<SpotifyQueueMonitorService>());
 

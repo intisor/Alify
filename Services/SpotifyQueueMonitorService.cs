@@ -82,7 +82,7 @@ namespace Alify.Services
                     return;
                 }
 
-                var spotify = await spotifyService.GetSpotifyClientAsync();
+                var spotify = await spotifyService.GetSpotifyClientAsync(spotifyToken);
 
                 if (spotify != null)
                 {

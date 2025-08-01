@@ -1,5 +1,4 @@
-﻿#nullable enable
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Alify.Models;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,36 +10,27 @@ using System.Web;
 
 namespace Alify.Services
 {
-    /// <summary>
-    /// Service for fetching and moderating song lyrics.
-    /// Now using high-performance ILoggerMessage Source Generator for zero-allocation logging.
-    /// </summary>
-    [DebuggerDisplay("HasGeniusKey: {_apiKeys.Genius?.Token != null}, HasGeminiKey: {_apiKeys.Gemini?.ApiKey != null}, HasOpenRouterKey: {_apiKeys.OpenRouter?.ApiKey != null}, HasMistralKey: {_apiKeys.Mistral?.ApiKey != null}")]
+    [DebuggerDisplay("HasGeniusKey: {_apiKeys.Genius.Token != null}, HasGeminiKey: {_apiKeys.Gemini.ApiKey != null}, HasOpenRouterKey: {_apiKeys.OpenRouter.ApiKey != null}, HasMistralKey: {_apiKeys.Mistral.ApiKey != null}")]
     public class LyricService
     {
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
         private readonly ApiKeys _apiKeys;
         private readonly ILogger<LyricService> _logger;
+        private readonly PlaywrightLyricsScraper _playwrightScraper;
 
         // Gemini API rate limiting (30 RPM = 1 request every 2 seconds)
         private static readonly SemaphoreSlim _geminiRateLimiter = new(1, 1);
         private static DateTime _lastGeminiRequestTime = DateTime.MinValue;
         private static readonly TimeSpan _geminiRequestInterval = TimeSpan.FromSeconds(2);
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LyricService"/> class.
-        /// </summary>
-        /// <param name="httpClient">The HTTP client for making requests.</param>
-        /// <param name="apiKeys">The application configuration for accessing API keys.</param>
-        /// <param name="cache">The memory cache for storing lyrics and moderation results.</param>
-        /// <param name="logger">Logger for high-performance structured logging.</param>
         public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache, ILogger<LyricService> logger)
         {
             _httpClient = httpClient;
             _apiKeys = apiKeys.Value;
             _cache = cache;
             _logger = logger;
+            _playwrightScraper = new PlaywrightLyricsScraper();
 
             // Log API key status for debugging
             _logger.LogInformation("Genius API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Genius?.Token) ? "Not Set" : "Set");
@@ -49,104 +39,55 @@ namespace Alify.Services
             _logger.LogInformation("Mistral API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Mistral?.ApiKey) ? "Not Set" : "Set");
         }
 
-        /// <summary>
-        /// Gets the lyrics for a song, using a cache to avoid repeated requests.
-        /// </summary>
-        /// <param name="artist">The artist of the song.</param>
-        /// <param name="title">The title of the song.</param>
-        /// <returns>The lyrics of the song, or null if not found.</returns>
         public async Task<string?> GetLyricsAsync(string artist, string title)
         {
-            var cacheKey = $"lyrics_{artist}_{title}";
+            string cacheKey = $"lyrics_{artist}_{title}";
             if (_cache.TryGetValue(cacheKey, out string? cachedLyrics))
             {
                 return cachedLyrics;
             }
 
-            var geniusLyrics = await GetLyricsFromGeniusAsync(title, artist);
-
-            if (!string.IsNullOrWhiteSpace(geniusLyrics))
+            var geniusKey = _apiKeys.Genius?.Token;
+            if (string.IsNullOrEmpty(geniusKey))
             {
-                _cache.Set(cacheKey, geniusLyrics, TimeSpan.FromHours(24));
-                // HIGH-PERFORMANCE LOGGING: Zero allocation, compile-time optimized
+                _logger.LogGeniusTokenMissing();
+                return null;
+            }
+
+            string searchUrl = $"https://api.genius.com/search?q={System.Web.HttpUtility.UrlEncode($"{title} {artist}")}";
+            using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
+
+            HttpResponseMessage response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogGeniusSearchFailed(response.StatusCode, title, artist);
+                return null;
+            }
+
+            string json = await response.Content.ReadAsStringAsync();
+            using JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
+            JsonElement hit = doc.RootElement.GetProperty("response").GetProperty("hits").EnumerateArray().FirstOrDefault();
+            if (hit.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            var songUrl = hit.GetProperty("result").GetProperty("url").GetString();
+            if (string.IsNullOrEmpty(songUrl)) return null;
+
+            // Use Playwright as the main scraper
+            var lyrics = await _playwrightScraper.ScrapeLyricsAsync(songUrl);
+            if (!string.IsNullOrWhiteSpace(lyrics))
+            {
+                _cache.Set(cacheKey, lyrics, TimeSpan.FromHours(24));
                 _logger.LogLyricsFound(title, artist);
             }
             else
             {
-                // HIGH-PERFORMANCE LOGGING: Zero allocation, structured parameters
                 _logger.LogLyricsNotFound(title, artist);
             }
-
-            return geniusLyrics;
-        }
-
-        /// <summary>
-        /// Fetches lyrics from the Genius API.
-        /// </summary>
-        /// <param name="title">The title of the song.</param>
-        /// <param name="artist">The artist of the song.</param>
-        /// <returns>The lyrics of the song, or null if an error occurs.</returns>
-        private async Task<string?> GetLyricsFromGeniusAsync(string title, string artist)
-        {
-            try
-            {
-                var geniusKey = _apiKeys.Genius?.Token;
-                if (string.IsNullOrEmpty(geniusKey))
-                {
-                    // HIGH-PERFORMANCE LOGGING: No string interpolation or boxing
-                    _logger.LogGeniusTokenMissing();
-                    return null;
-                }
-
-                var searchUrl = $"https://api.genius.com/search?q={HttpUtility.UrlEncode($"{title} {artist}")}";
-                
-                using var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
-
-                var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                {
-                    // HIGH-PERFORMANCE LOGGING: Enum passed directly, no boxing
-                    _logger.LogGeniusSearchFailed(response.StatusCode, title, artist);
-                    return null;
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-
-                var hit = doc.RootElement.GetProperty("response").GetProperty("hits").EnumerateArray().FirstOrDefault();
-                if (hit.ValueKind == JsonValueKind.Undefined)
-                {
-                    return null;
-                }
-
-                var songUrl = hit.GetProperty("result").GetProperty("url").GetString();
-                if (string.IsNullOrEmpty(songUrl)) return null;
-
-                var html = await _httpClient.GetStringAsync(songUrl);
-                var htmlDoc = new HtmlDocument();
-                htmlDoc.LoadHtml(html);
-
-                var lyricsNode = htmlDoc.DocumentNode.SelectSingleNode("//div[contains(@class, 'Lyrics__Container')]");
-                if (lyricsNode == null) return null;
-
-                // Replace <br> tags with newlines to preserve formatting
-                var lyricsHtml = lyricsNode.InnerHtml;
-                var lyricsWithNewlines = lyricsHtml.Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase);
-
-                // Create a new HtmlDocument to parse the modified HTML and get the plain text
-                var tempDoc = new HtmlDocument();
-                tempDoc.LoadHtml(lyricsWithNewlines);
-                var lyrics = HttpUtility.HtmlDecode(tempDoc.DocumentNode.InnerText).Trim();
-
-                return string.IsNullOrWhiteSpace(lyrics) ? null : lyrics;
-            }
-            catch (Exception ex)
-            {
-                // HIGH-PERFORMANCE LOGGING: Exception + structured parameters, zero allocation
-                _logger.LogGeniusError(ex, title, artist);
-                return null;
-            }
+            return lyrics;
         }
 
         /// <summary>
@@ -183,8 +124,8 @@ namespace Alify.Services
             var providers = new List<(string Provider, string Endpoint, string? ApiKey, string Model)>
             {
                 ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", _apiKeys.Gemini?.ApiKey, "gemini-1.5-flash"),
-                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "meta-llama/llama-3.1-8b-instruct:free"),
-                ("Mistral", "https://api.mistral.ai/v1/chat/completions", _apiKeys.Mistral?.ApiKey, "mistral-moderation-2411")
+                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "meta-llama/llama-3.1-8b-instruct"),
+                ("Mistral", "https://api.mistral.ai/v1/chat/moderations", _apiKeys.Mistral?.ApiKey, "mistral-moderation-latest")
             };
 
             foreach (var (provider, endpoint, providerApiKey, model) in providers)
@@ -198,15 +139,18 @@ namespace Alify.Services
 
                 for (var attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    await _geminiRateLimiter.WaitAsync();
+                    if (provider == "Gemini")
+                        await _geminiRateLimiter.WaitAsync();
                     try
                     {
-                        var timeSinceLastRequest = DateTime.UtcNow - _lastGeminiRequestTime;
-                        if (timeSinceLastRequest < _geminiRequestInterval)
+                        if (provider == "Gemini")
                         {
-                            await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
+                            var timeSinceLastRequest = DateTime.UtcNow - _lastGeminiRequestTime;
+                            if (timeSinceLastRequest < _geminiRequestInterval)
+                            {
+                                await Task.Delay(_geminiRequestInterval - timeSinceLastRequest);
+                            }
                         }
-
                         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                         var result = await CallApiAsync(provider, endpoint, providerApiKey, model, prompt, cts.Token);
                         if (result != null)
@@ -239,8 +183,11 @@ namespace Alify.Services
                     }
                     finally
                     {
-                        _lastGeminiRequestTime = DateTime.UtcNow;
-                        _geminiRateLimiter.Release();
+                        if (provider == "Gemini")
+                        {
+                            _lastGeminiRequestTime = DateTime.UtcNow;
+                            _geminiRateLimiter.Release();
+                        }
                     }
 
                     if (attempt < maxRetries)
@@ -250,6 +197,7 @@ namespace Alify.Services
                         await Task.Delay(delay);
                     }
                 }
+                // If Gemini fails after 3 attempts, fallback to next provider
             }
 
             _logger.LogModerationAllProvidersFailed();
@@ -268,9 +216,22 @@ namespace Alify.Services
         /// <returns>A <see cref="LyricsModerationResult"/>, or null if the request fails.</returns>
         private async Task<LyricsModerationResult?> CallApiAsync(string provider, string endpoint, string apiKey, string model, string prompt, CancellationToken cancellationToken)
         {
-            var requestBody = provider == "Gemini"
-                ? new { contents = new[] { new { parts = new[] { new { text = prompt } }, role = "user" } } }
-                : (object)new { model, messages = new[] { new { role = "user", content = prompt } } };
+            object requestBody;
+            if (provider == "Gemini")
+            {
+                requestBody = new { contents = new[] { new { parts = new[] { new { text = prompt } }, role = "user" } } };
+            }
+            else if (provider == "Mistral")
+            {
+                requestBody = new {
+                    model,
+                    input = new[] { new { role = "user", content = prompt } }
+                };
+            }
+            else
+            {
+                requestBody = new { model, messages = new[] { new { role = "user", content = prompt } } };
+            }
 
             var requestJson = JsonSerializer.Serialize(requestBody);
             var request = new HttpRequestMessage(HttpMethod.Post, provider == "Gemini" ? $"{endpoint}?key={apiKey}" : endpoint)
@@ -298,7 +259,54 @@ namespace Alify.Services
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-            return provider == "Gemini" ? ParseGeminiResponse(responseString) : ParseOpenAIResponse(responseString);
+            if (provider == "Gemini")
+                return ParseGeminiResponse(responseString);
+            if (provider == "Mistral")
+                return ParseMistralResponse(responseString);
+            return ParseOpenAIResponse(responseString);
+        }
+
+        /// <summary>
+        /// Parses the JSON response from the Mistral API.
+        /// </summary>
+        /// <param name="responseString">The JSON response string.</param>
+        /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
+        private LyricsModerationResult? ParseMistralResponse(string responseString)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(responseString);
+                var result = new LyricsModerationResult();
+                var root = doc.RootElement;
+                // Defensive: check if 'results' exists and is an array with at least one element
+                if (!root.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array || results.GetArrayLength() == 0)
+                {
+                    _logger.LogModerationParseError(new KeyNotFoundException("'results' array missing or empty in Mistral response"), "Mistral");
+                    return null;
+                }
+                var firstResult = results[0];
+                // Defensive: check for 'flagged' and 'category_scores'
+                if (!firstResult.TryGetProperty("flagged", out var flaggedProp) || !firstResult.TryGetProperty("category_scores", out var scores))
+                {
+                    _logger.LogModerationParseError(new KeyNotFoundException("'flagged' or 'category_scores' missing in Mistral response"), "Mistral");
+                    return null;
+                }
+                var flagged = flaggedProp.GetBoolean();
+                result.suitable_for_kids = !flagged;
+                result.violence = scores.TryGetProperty("violence", out var violenceScore) && violenceScore.GetDouble() > 0.5;
+                result.hate = scores.TryGetProperty("hate", out var hateScore) && hateScore.GetDouble() > 0.5;
+                result.sexual = scores.TryGetProperty("sexual", out var sexualScore) && sexualScore.GetDouble() > 0.5;
+                result.profanity = scores.TryGetProperty("profanity", out var profanityScore) && profanityScore.GetDouble() > 0.5;
+                result.confidence = flagged ? 1.0 : 1.0 - scores.EnumerateObject().Max(p => p.Value.GetDouble());
+                result.moderatedAt = DateTime.UtcNow;
+                result.context = flagged ? "Flagged by Mistral" : "Not flagged by Mistral";
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogModerationParseError(ex, "Mistral");
+                return null;
+            }
         }
 
         /// <summary>
