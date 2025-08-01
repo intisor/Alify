@@ -365,3 +365,9 @@ FodyWeavers.xsd
 # Ignore appsettings files (for secrets)
 appsettings.json
 appsettings.*.json
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
