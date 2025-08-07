@@ -6,9 +6,13 @@
     <UserSecretsId>a1f1-a5d8e9f0b1c2-alify</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Extensions\**" />
     <Compile Remove="Services\NewFolder\**" />
+    <Content Remove="Extensions\**" />
     <Content Remove="Services\NewFolder\**" />
+    <EmbeddedResource Remove="Extensions\**" />
     <EmbeddedResource Remove="Services\NewFolder\**" />
+    <None Remove="Extensions\**" />
     <None Remove="Services\NewFolder\**" />
   </ItemGroup>
   <ItemGroup>
@@ -19,8 +23,5 @@
     <PackageReference Include="SpotifyAPI.Web.Auth" />
     <PackageReference Include="TickerQ" />
     <PackageReference Include="TickerQ.Dashboard" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Extensions\" />
   </ItemGroup>
 </Project>

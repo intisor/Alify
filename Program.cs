@@ -1,11 +1,11 @@
 using Alify.Controllers;
-using Alify.Doppler;
-using Alify.Models;
-using Alify.Services;
+using Alify.Core.Infrastructure.Doppler;
+using Alify.Core.Models;
+using Alify.Features.Spotify.Services;
+using Alify.Features.Spotify.Events;
 using Serilog;
 using SpotifyAPI.Web;
-using TickerQ.Dashboard.DependencyInjection;
-using TickerQ.DependencyInjection;
+using Alify.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,21 +74,15 @@ builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
 
-builder.Services.AddSingleton<SseService>(); // Add SSE service for real-time updates
-builder.Services.AddSingleton<Alify.Services.Events.ISpotifySubject>(sp => sp.GetRequiredService<SseService>());
+// Add SSE and Spotify services
+builder.Services.AddSingleton<SseService>(); 
+builder.Services.AddSingleton<ISseService>(sp => sp.GetRequiredService<SseService>());
+builder.Services.AddSingleton<ISpotifySubject>(sp => sp.GetRequiredService<SseService>());
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
-// Register the background service for queue monitoring
-builder.Services.AddScoped<SpotifyQueueMonitorService>();
-//builder.Services.AddHostedService<SpotifyQueueMonitorService>(provider =>
-//    provider.GetRequiredService<SpotifyQueueMonitorService>());
-
-// Add TickerQ services
-builder.Services.AddTickerQ(opt =>
-{
-    opt.SetInstanceIdentifier("SpotifyQueueMonitor");
-	opt.AddDashboard(basePath: "/tickerq-dashboard");
-});
+// Register the unified Spotify playback monitoring service (replaces both SpotifyBackgroundService and SpotifyQueueMonitorService)
+builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
+builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetRequiredService<SpotifyPlaybackMonitorService>());
 
 var app = builder.Build();
 
@@ -113,7 +107,11 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
 
-// Add TickerQ middleware
-app.UseTickerQ();
+// Add graceful shutdown handling for SSE connections
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    var sseService = app.Services.GetService<ISseService>();
+    sseService?.Cleanup();
+});
 
 app.Run();
