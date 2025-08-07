@@ -6,9 +6,9 @@
 @if (Model.PlaybackInfo?.CurrentlyPlaying?.FullTrack != null)
 {
     var track = Model.PlaybackInfo.CurrentlyPlaying;
-    <div class="rounded-lg shadow bg-white mb-6 p-6 flex flex-col items-center">
-        <h5 class="text-xl font-semibold mb-2">@track.FullTrack.Name</h5>
-        <p class="text-gray-700 mb-2">by @track.FullTrack.Artists.FirstOrDefault()?.Name</p>
+    <div class="rounded-lg shadow bg-white mb-6 p-6 flex flex-col items-center" id="nowPlaying">
+        <h5 class="text-xl font-semibold mb-2" id="trackName">@track.FullTrack.Name</h5>
+        <p class="text-gray-700 mb-2" id="trackArtist">by @track.FullTrack.Artists.FirstOrDefault()?.Name</p>
         <div class="flex flex-wrap gap-2 mb-4">
             @if (track.IsFlagged)
             {
@@ -54,3 +54,37 @@
     </form>
 </div>
 <p class="text-gray-500 text-center mt-4">@Model.StatusMessage</p>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            console.log("Connecting to SSE endpoint...");
+            const eventSource = new EventSource("/SpotifyEvents");
+
+            eventSource.addEventListener("playbackInfo", function (event) {
+                console.log("Playback info received:", event.data);
+                const playbackInfo = JSON.parse(event.data);
+
+                // Update the "Now Playing" section with the new data
+                if (playbackInfo.currentlyPlaying) {
+                    document.getElementById("trackName").innerText = playbackInfo.currentlyPlaying.fullTrack.name;
+                    document.getElementById("trackArtist").innerText = "by " + playbackInfo.currentlyPlaying.fullTrack.artists[0]?.name;
+                    // You might need to update other parts of the UI as well
+                }
+            });
+
+            eventSource.addEventListener("trackSkipped", function (event) {
+                console.log("Track skipped event received:", event.data);
+                const data = JSON.parse(event.data);
+
+                // Display a notification
+                alert(`Track Skipped: "${data.trackName}" by ${data.artist}.\nReason: ${data.reason}`);
+            });
+
+            eventSource.onerror = function (err) {
+                console.error("EventSource failed:", err);
+                eventSource.close();
+            };
+        });
+    </script>
+}

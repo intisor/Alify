@@ -6,6 +6,12 @@
     <UserSecretsId>a1f1-a5d8e9f0b1c2-alify</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Services\NewFolder\**" />
+    <Content Remove="Services\NewFolder\**" />
+    <EmbeddedResource Remove="Services\NewFolder\**" />
+    <None Remove="Services\NewFolder\**" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="Serilog.AspNetCore" />

@@ -74,7 +74,8 @@ builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
 
-
+builder.Services.AddSingleton<SseService>(); // Add SSE service for real-time updates
+builder.Services.AddSingleton<Alify.Services.Events.ISpotifySubject>(sp => sp.GetRequiredService<SseService>());
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Alify.Services;
 using Serilog;
+using Alify.Services.Events;
 
 [DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
@@ -19,6 +20,7 @@ public class SpotifyService
     private readonly LyricService _lyricService;
     private readonly IMemoryCache _cache;
     private readonly SpotifyRequestCache _requestCache;
+    private readonly ISpotifySubject _spotifySubject;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpotifyService"/> class.
@@ -33,13 +35,15 @@ public class SpotifyService
         IHttpContextAccessor httpContextAccessor,
         LyricService lyricService,
         IMemoryCache cache,
-        SpotifyRequestCache requestCache)
+        SpotifyRequestCache requestCache,
+        ISpotifySubject spotifySubject)
     {
         _spotifyOptions = spotifyOptions.Value;
         _httpContextAccessor = httpContextAccessor;
         _lyricService = lyricService;
         _cache = cache;
         _requestCache = requestCache;
+        _spotifySubject = spotifySubject;
     }
 
     // Defensive null check for HttpContext and Session
@@ -342,10 +346,12 @@ public class SpotifyService
         }
         if (playbackInfo.CurrentlyPlaying.IsFlagged)
         {
+            var trackToSkip = playbackInfo.CurrentlyPlaying;
             Log.Logger.Information("SkipIfFlaggedAsync: Skipping flagged track: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
             try
-            {
+            {   
                 await spotify.Player.SkipNext();
+                await _spotifySubject.NotifyTrackSkippedEventAsync(trackToSkip);
             }
             catch (Exception ex)
             {
