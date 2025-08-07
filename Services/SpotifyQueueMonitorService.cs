@@ -62,8 +62,8 @@ namespace Alify.Services
             _logger.LogInformation("Spotify queue monitoring stopped.");
         }
 
-        // Fix cron expression to be valid for TickerQ (5 fields: minute, hour, day, month, day-of-week)
-        [TickerFunction("CheckQueueAsync", "*/3 * * * *")]
+       
+        [TickerFunction("CheckQueueAsync")]
         public async Task CheckQueueAsync()
         {
             try
@@ -71,7 +71,6 @@ namespace Alify.Services
                 using var scope = _serviceProvider.CreateScope();
                 var spotifyService = scope.ServiceProvider.GetRequiredService<SpotifyService>();
 
-                // Retrieve Spotify token from IMemoryCache
                 if (!_cache.TryGetValue("SpotifyAuthToken", out string? spotifyToken) || string.IsNullOrEmpty(spotifyToken))
                 {
                     if (DateTime.UtcNow - _lastAuthWarning > _authWarningCooldown)
@@ -84,15 +83,52 @@ namespace Alify.Services
 
                 var spotify = await spotifyService.GetSpotifyClientAsync(spotifyToken);
 
+                int? nextMs = null;
                 if (spotify != null)
                 {
-                    await spotifyService.SkipIfFlaggedAsync(spotify);
-                    _lastAuthWarning = DateTime.MinValue;
+                    try
+                    {
+                        await spotifyService.SkipIfFlaggedAsync(spotify);
+                        // Get playback info to determine next check time
+                        var playbackInfo = await spotifyService.GetCurrentPlaybackInfoAsync(spotify);
+                        if (playbackInfo?.CurrentlyPlaying != null && playbackInfo.RemainingTimeMs > 2000)
+                        {
+                            nextMs = playbackInfo.RemainingTimeMs - 2000; // 2s buffer
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error in SkipIfFlaggedAsync during queue monitoring.");
+                    }
+                    if (_lastAuthWarning != DateTime.MinValue)
+                        _lastAuthWarning = DateTime.MinValue;
                 }
                 else if (DateTime.UtcNow - _lastAuthWarning > _authWarningCooldown)
                 {
                     _logger.LogWarning("Spotify client not available. Authentication may be required.");
                     _lastAuthWarning = DateTime.UtcNow;
+                }
+
+                // Dynamically schedule next check if possible
+                if (nextMs.HasValue && nextMs.Value > 0)
+                {
+                    if (_currentTickerId.HasValue)
+                    {
+                        await _timeTickerManager.DeleteAsync(_currentTickerId.Value);
+                        _currentTickerId = null;
+                    }
+                    var nextExecution = DateTime.UtcNow.AddMilliseconds(nextMs.Value);
+                    var ticker = new TimeTicker
+                    {
+                        Function = "CheckQueueAsync",
+                        ExecutionTime = nextExecution,
+                        Description = "Dynamic Spotify Queue Monitoring",
+                        Retries = 3,
+                        RetryIntervals = new[] { 10, 20, 30 }
+                    };
+                    await _timeTickerManager.AddAsync(ticker);
+                    _currentTickerId = ticker.Id;
+                    _logger.LogInformation($"Next Spotify queue check scheduled for {nextExecution:O} (in {nextMs.Value / 1000.0:F1} seconds)");
                 }
             }
             catch (Exception ex)

@@ -87,7 +87,6 @@ builder.Services.AddTickerQ(opt =>
 {
     opt.SetInstanceIdentifier("SpotifyQueueMonitor");
 	opt.AddDashboard(basePath: "/tickerq-dashboard");
-	opt.AddDashboardBasicAuth();
 });
 
 var app = builder.Build();

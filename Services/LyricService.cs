@@ -137,6 +137,7 @@ namespace Alify.Services
                     continue;
                 }
 
+                int consecutive503s = 0;
                 for (var attempt = 1; attempt <= maxRetries; attempt++)
                 {
                     if (provider == "Gemini")
@@ -163,11 +164,19 @@ namespace Alify.Services
                     catch (HttpRequestException ex) when (ex.StatusCode.HasValue && IsRetryable(ex.StatusCode.Value))
                     {
                         _logger.LogModerationRateLimit(provider, attempt, ex.StatusCode, ex.Message);
-                        // If Gemini returns TooManyRequests, break and try next provider
                         if (provider == "Gemini" && ex.StatusCode == HttpStatusCode.TooManyRequests)
                         {
                             _logger.LogModerationProviderFailed(provider, attempt);
                             break;
+                        }
+                        if (provider == "Gemini" && ex.StatusCode == HttpStatusCode.ServiceUnavailable)
+                        {
+                            consecutive503s++;
+                            if (consecutive503s >= 2)
+                            {
+                                _logger.LogWarning("Gemini returned 503 ServiceUnavailable twice in a row. Falling back to next provider.");
+                                break;
+                            }
                         }
                         if (attempt == maxRetries) break;
                     }
@@ -192,12 +201,20 @@ namespace Alify.Services
 
                     if (attempt < maxRetries)
                     {
-                        var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                        TimeSpan delay;
+                        if (provider == "Gemini" && consecutive503s > 0)
+                        {
+                            delay = TimeSpan.FromSeconds(10 * consecutive503s); // Exponential backoff for 503s
+                        }
+                        else
+                        {
+                            delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                        }
                         _logger.LogModerationRetryDelay(delay.TotalSeconds);
                         await Task.Delay(delay);
                     }
                 }
-                // If Gemini fails after 3 attempts, fallback to next provider
+                // If Gemini fails after 2x 503 or 3 attempts, fallback to next provider
             }
 
             _logger.LogModerationAllProvidersFailed();

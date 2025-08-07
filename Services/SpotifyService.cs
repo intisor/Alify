@@ -10,10 +10,6 @@ using Microsoft.Extensions.Options;
 using Alify.Services;
 using Serilog;
 
-/// <summary>
-/// Service for interacting with the Spotify API.
-/// Handles authentication, playback control, and data fetching.
-/// </summary>
 [DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
 {
@@ -347,8 +343,18 @@ public class SpotifyService
         if (playbackInfo.CurrentlyPlaying.IsFlagged)
         {
             Log.Logger.Information("SkipIfFlaggedAsync: Skipping flagged track: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
-            await spotify.Player.SkipNext();
-            _requestCache.ClearCache();
+            try
+            {
+                await spotify.Player.SkipNext();
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error(ex, "SkipIfFlaggedAsync: Failed to skip track due to Spotify API error.");
+            }
+            finally
+            {
+                _requestCache.ClearCache();
+            }
         }
         else
         {

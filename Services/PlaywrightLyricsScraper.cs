@@ -1,6 +1,7 @@
 using Microsoft.Playwright;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System;
 
 namespace Alify.Services
 {
@@ -9,23 +10,54 @@ namespace Alify.Services
         public async Task<string?> ScrapeLyricsAsync(string songUrl)
         {
             using IPlaywright playwright = await Playwright.CreateAsync();
-            IBrowser browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
-            IPage page = await browser.NewPageAsync();
-
-            await page.GotoAsync(songUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-            await page.WaitForSelectorAsync("div[class*='Lyrics__Container']");
-
-            IReadOnlyList<IElementHandle> lyricsBlocks = await page.QuerySelectorAllAsync("div[class*='Lyrics__Container']");
-            List<string> lyrics = new List<string>();
-
-            foreach (var block in lyricsBlocks)
+            IBrowser browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                string text = await block.InnerTextAsync();
-                lyrics.Add(text.Trim());
-            }
+                Headless = true,
+                Args = new[]
+                {
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-default-apps",
+                    "--disable-translate",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-device-discovery-notifications",
+                    "--mute-audio"
+                }
+            });
+            IBrowserContext context = await browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                ViewportSize = new ViewportSize { Width = 800, Height = 600 },
+                UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            });
+            IPage page = await context.NewPageAsync();
 
-            await browser.CloseAsync();
-            return lyrics.Count > 0 ? string.Join("\n", lyrics) : null;
+            try
+            {
+                await page.GotoAsync(songUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded, Timeout = 60000 });
+                await page.WaitForSelectorAsync("div[class*='Lyrics__Container']", new PageWaitForSelectorOptions { Timeout = 60000 });
+
+                IReadOnlyList<IElementHandle> lyricsBlocks = await page.QuerySelectorAllAsync("div[class*='Lyrics__Container']");
+                List<string> lyrics = [];
+
+                foreach (var block in lyricsBlocks)
+                {
+                    string text = await block.InnerTextAsync();
+                    lyrics.Add(text.Trim());
+                }
+
+                await browser.CloseAsync();
+                return lyrics.Count > 0 ? string.Join("\n", lyrics) : null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error scraping lyrics for {songUrl}: {ex.Message}");
+                return null;
+            }
         }
     }
 }

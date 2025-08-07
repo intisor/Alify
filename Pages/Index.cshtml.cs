@@ -1,14 +1,9 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc;
 
-public class IndexModel : PageModel
+public class IndexModel(SpotifyService spotifyService) : PageModel
 {
-    private readonly SpotifyService _spotifyService;
-
-    public IndexModel(SpotifyService spotifyService)
-    {
-        _spotifyService = spotifyService;
-    }
+    private readonly SpotifyService _spotifyService = spotifyService;
 
     public string? ErrorMessage { get; set; }
     public string? SuccessMessage { get; set; }
@@ -17,8 +12,8 @@ public class IndexModel : PageModel
     public void OnGet([FromQuery] string? error, [FromQuery] string? success)
     {
         IsAuthenticated = _spotifyService.IsAuthenticated();
-        ErrorMessage = error ?? TempData["ErrorMessage"] as string;
-        SuccessMessage = success ?? TempData["SuccessMessage"] as string;
+        ErrorMessage = error ?? TempData[key: "ErrorMessage"] as string;
+        SuccessMessage = success ?? TempData[key: "SuccessMessage"] as string;
     }
 
     public IActionResult OnGetLogin()
