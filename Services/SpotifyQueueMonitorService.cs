@@ -1,3 +1,10 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
+using TickerQ.Utilities.Base;
+using TickerQ.Utilities.Interfaces.Managers;
+using TickerQ.Utilities.Models.Ticker;
+
+
 namespace Alify.Services
 {
     [DebuggerDisplay("IsMonitoring: {_isMonitoring}, AuthWarningCooldown: {_authWarningCooldown.TotalMinutes}min")]

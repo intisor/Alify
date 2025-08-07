@@ -1,6 +1,10 @@
 using Alify.Extensions;
 using Alify.Models;
 using Alify.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OutputCaching;
+using Microsoft.Extensions.Caching.Memory;
+using SpotifyAPI.Web;
 
 namespace Alify.Controllers
 {

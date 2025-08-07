@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Text.Json.Serialization;
+
 namespace Alify.Models
 {
     [DebuggerDisplay("Genius: {Genius?.Token != null ? \"Configured\" : \"Not configured\"}, Gemini: {Gemini?.ApiKey != null ? \"Configured\" : \"Not configured\"}, OpenRouter: {OpenRouter?.ApiKey != null ? \"Configured\" : \"Not configured\"}, Mistral: {Mistral?.ApiKey != null ? \"Configured\" : \"Not configured\"}")]

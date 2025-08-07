@@ -1,4 +1,7 @@
-﻿namespace Alify.Models
+﻿using System.Diagnostics;
+using SpotifyAPI.Web;
+
+namespace Alify.Models
 {
     /// <summary>
     /// Represents a Spotify playlist.

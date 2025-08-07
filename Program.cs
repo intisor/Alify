@@ -2,6 +2,10 @@ using Alify.Controllers;
 using Alify.Doppler;
 using Alify.Models;
 using Alify.Services;
+using Serilog;
+using SpotifyAPI.Web;
+using TickerQ.Dashboard.DependencyInjection;
+using TickerQ.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -70,7 +74,7 @@ builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
 builder.Services.AddScoped<SpotifyController>();
 builder.Services.AddMemoryCache();
 
-// Register singleton cache for Spotify API calls (changed from scoped to singleton)
+
 builder.Services.AddSingleton<SpotifyRequestCache>();
 
 // Register the background service for queue monitoring

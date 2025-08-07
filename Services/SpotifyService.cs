@@ -1,5 +1,14 @@
-﻿using Alify.Models;
+﻿using System.Diagnostics;
+using Alify.Models;
+using Microsoft.Extensions.Caching.Memory;
+using SpotifyAPI.Web;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Alify.Services;
+using Serilog;
 
 [DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
