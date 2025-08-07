@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using Microsoft.Extensions.Caching.Memory;
-using SpotifyAPI.Web;
-
 namespace Alify.Services
 {
     [DebuggerDisplay("CacheTimeout: {_cacheTimeout.TotalSeconds}s")]

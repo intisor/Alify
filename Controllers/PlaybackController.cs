@@ -1,8 +1,4 @@
 using Alify.Models;
-using Alify.Services;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
-using SpotifyAPI.Web;
 
 namespace Alify.Controllers
 {

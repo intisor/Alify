@@ -1,7 +1,4 @@
-﻿using System.Diagnostics;
-using Alify.Models;
-using SpotifyAPI.Web;
-using System.Text.RegularExpressions;
+﻿using Alify.Models;
 
 namespace Alify.Services
 {

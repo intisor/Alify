@@ -1,6 +1,3 @@
-using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.AspNetCore.Mvc;
-
 public class IndexModel(SpotifyService spotifyService) : PageModel
 {
     private readonly SpotifyService _spotifyService = spotifyService;

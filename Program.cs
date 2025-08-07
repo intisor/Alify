@@ -2,10 +2,6 @@ using Alify.Controllers;
 using Alify.Doppler;
 using Alify.Models;
 using Alify.Services;
-using Serilog;
-using SpotifyAPI.Web;
-using TickerQ.Dashboard.DependencyInjection;
-using TickerQ.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 

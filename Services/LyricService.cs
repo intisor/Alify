@@ -1,12 +1,4 @@
-﻿using System.Diagnostics;
-using Alify.Models;
-using HtmlAgilityPack;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
-using System.Net;
-using System.Text;
-using System.Text.Json;
-using System.Web;
+﻿using Alify.Models;
 
 namespace Alify.Services
 {

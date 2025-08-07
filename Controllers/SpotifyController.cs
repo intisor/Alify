@@ -1,5 +1,4 @@
 ﻿using Alify.Services;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Alify.Controllers
 {
