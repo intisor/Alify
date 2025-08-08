@@ -25,13 +25,13 @@ namespace Alify.Services
         private static DateTime _lastGeminiRequestTime = DateTime.MinValue;
         private static readonly TimeSpan _geminiRequestInterval = TimeSpan.FromSeconds(2);
 
-        public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache, ILogger<LyricService> logger)
+        public LyricService(HttpClient httpClient, IOptions<ApiKeys> apiKeys, IMemoryCache cache, ILogger<LyricService> logger, ILogger<PlaywrightLyricsScraper> playwrightLogger)
         {
             _httpClient = httpClient;
             _apiKeys = apiKeys.Value;
             _cache = cache;
             _logger = logger;
-            _playwrightScraper = new PlaywrightLyricsScraper();
+            _playwrightScraper = new PlaywrightLyricsScraper(playwrightLogger);
 
             // Log API key status for debugging
             _logger.LogInformation("Genius API Key: {Status}", string.IsNullOrEmpty(_apiKeys.Genius?.Token) ? "Not Set" : "Set");

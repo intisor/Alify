@@ -1,4 +1,4 @@
-﻿@page
+﻿@page "/callback"
 @model Alify.Pages.callbackModel
 @{
     ViewData["Title"] = "Spotify Authentication";
@@ -16,5 +16,5 @@
     // Auto-redirect if this page is shown for too long (fallback)
     setTimeout(function() {
         window.location.href = '/Index';
-    }, 5000);
+    }, 15000);
 </script>
