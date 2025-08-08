@@ -32,7 +32,7 @@ namespace Alify.Pages
                 if (success)
                 {
                     TempData["SuccessMessage"] = "Successfully connected to Spotify!";
-                    return RedirectToPage("/Dashboard");
+                    return RedirectToPage("/Dashboard/Dashboard");
                 }
                 else
                 {

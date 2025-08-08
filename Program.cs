@@ -9,25 +9,29 @@ using Alify.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateLogger();
 builder.Host.UseSerilog();
 
-// Doppler integration: Read the token and add the custom configuration provider.
-// The token can come from user secrets, environment variables, or launchSettings.json.
 var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 builder.Configuration.AddDoppler(dopplerToken);
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.RootDirectory = "/Pages";
+    
+    options.Conventions.AddPageRoute("/Authentication/callback", "/callback");
+    options.Conventions.AddPageRoute("/Dashboard/Dashboard", "/Dashboard");  
+    options.Conventions.AddPageRoute("/Lyrics/LyricsView", "/LyricsView");
+    options.Conventions.AddPageRoute("/Spotify/SpotifyEvents", "/SpotifyEvents");
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOutputCache();
 
-// Configure HttpLogging for automatic HTTP request/response logging
 builder.Services.AddHttpLogging(options =>
 {
-    // Log request and response details for debugging external APIs
     options.LoggingFields = Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod |
                            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestPath |
                            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseStatusCode |
@@ -35,35 +39,25 @@ builder.Services.AddHttpLogging(options =>
                            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestHeaders |
                            Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.ResponseHeaders;
 
-    // Security: Exclude sensitive headers to prevent API key exposure
     options.RequestHeaders.Add("User-Agent");
     options.RequestHeaders.Add("Accept");
     options.RequestHeaders.Add("Content-Type");
-    // Explicitly exclude Authorization headers to protect API keys
-    
-    options.ResponseHeaders.Add("Content-Type");
     options.ResponseHeaders.Add("Cache-Control");
-    
-    // Exclude request/response bodies initially (can enable later for specific debugging)
-    // This prevents large payloads and sensitive data from being logged
-    
-    // Set appropriate log level (Information for development, Warning for production)
-    options.CombineLogs = true; // Combine request/response in single log entry
+    options.CombineLogs = true;
 });
 
-//builder.Services.AddSignalR(); // Add SignalR support
 builder.Services.AddResponseCompression(options =>
 {
 	options.EnableForHttps = true;
 });
 builder.Services.AddSession(options =>
 {
-	options.IdleTimeout = TimeSpan.FromMinutes(30); // Increased timeout for better UX
+	options.IdleTimeout = TimeSpan.FromMinutes(30); 
 	options.Cookie.HttpOnly = true;
 	options.Cookie.IsEssential = true;
 	options.Cookie.SameSite = SameSiteMode.Lax; // Better for OAuth flows
 });
-builder.Services.AddHttpClient(); // for making HTTP requests (lyrics, AI, etc.)
+builder.Services.AddHttpClient(); 
 builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
 builder.Services.Configure<SpotifyOptions>(builder.Configuration.GetSection("Spotify"));
 builder.Services.AddSingleton<SpotifyService>();
@@ -86,7 +80,6 @@ builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetReq
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
 if (!app.Environment.IsDevelopment())
 {
 	app.UseExceptionHandler("/Error");
@@ -94,20 +87,23 @@ if (!app.Environment.IsDevelopment())
 	app.UseResponseCompression();
 }
 
-// Add HttpLogging middleware early in the pipeline to capture all HTTP traffic
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Incoming request: {Method} {Path}", context.Request.Method, context.Request.Path);
+    await next();
+    logger.LogInformation("Response status: {StatusCode}", context.Response.StatusCode);
+});
+
 app.UseHttpLogging();
-
 app.UseOutputCache();
-
-//app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseSession(); // enable session usage
+app.UseSession();
 app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
 
-// Add graceful shutdown handling for SSE connections
 app.Lifetime.ApplicationStopping.Register(() =>
 {
     var sseService = app.Services.GetService<ISseService>();

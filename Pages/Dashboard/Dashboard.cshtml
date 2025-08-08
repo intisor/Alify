@@ -1,4 +1,4 @@
-﻿@page "/dashboard"
+@page
 @model Alify.Pages.DashboardModel
 
 <h2 class="text-2xl font-bold mb-4">Now Playing</h2>
@@ -12,11 +12,11 @@
         <div class="flex flex-wrap gap-2 mb-4">
             @if (track.IsFlagged)
             {
-                <span class="px-2 py-1 rounded bg-yellow-200 text-yellow-900 text-sm font-medium">⚠️ Flagged</span>
+                <span class="px-2 py-1 rounded bg-yellow-200 text-yellow-900 text-sm font-medium">?? Flagged</span>
             }
             else
             {
-                <span class="px-2 py-1 rounded bg-green-200 text-green-900 text-sm font-medium">✅ Clean</span>
+                <span class="px-2 py-1 rounded bg-green-200 text-green-900 text-sm font-medium">? Clean</span>
             }
             @if (track.FullTrack.Explicit)
             {
@@ -50,7 +50,7 @@
         }
     </form>
     <form method="post">
-        <button type="submit" asp-page-handler="RefreshData" class="px-4 py-2 rounded bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200 transition">🔄 Refresh Data</button>
+        <button type="submit" asp-page-handler="RefreshData" class="px-4 py-2 rounded bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200 transition">?? Refresh Data</button>
     </form>
 </div>
 <p class="text-gray-500 text-center mt-4">@Model.StatusMessage</p>

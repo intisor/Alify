@@ -1,4 +1,4 @@
-﻿@page "/"
+﻿@page 
 @model IndexModel
 @{
     ViewData["Title"] = "Home";
@@ -21,7 +21,7 @@
         @if (Model.IsAuthenticated)
         {
             <a class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition" href="/Dashboard">Go to Dashboard</a>
-            <a class="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition" href="/ProductionDemo">Production Demo</a>
+            <a class="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition" href="/SpotifyEvents">Spotify Events</a>
             <form method="post" asp-page-handler="Logout" class="inline">
                 <button type="submit" class="px-4 py-2 rounded border border-gray-400 text-gray-700 bg-white hover:bg-gray-100 font-semibold transition">Logout</button>
             </form>

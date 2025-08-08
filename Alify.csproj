@@ -24,4 +24,10 @@
     <PackageReference Include="TickerQ" />
     <PackageReference Include="TickerQ.Dashboard" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Features\Authentication\Pages\" />
+    <Folder Include="Features\Dashboard\" />
+    <Folder Include="Features\Lyrics\Pages\" />
+    <Folder Include="Features\Spotify\Pages\" />
+  </ItemGroup>
 </Project>
