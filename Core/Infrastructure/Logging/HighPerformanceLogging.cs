@@ -86,5 +86,6 @@ namespace Alify.Core.Infrastructure.Logging
 
         [LoggerMessage(EventId = 410, Level = LogLevel.Error, Message = "Monitoring error in {Operation}")]
         public static partial void LogMonitoringError(this ILogger logger, Exception exception, string operation);
+
     }
 }

@@ -3,9 +3,6 @@ using SpotifyAPI.Web;
 
 namespace Alify.Core.Models
 {
-    /// <summary>
-    /// Represents a Spotify playlist.
-    /// </summary>
     [DebuggerDisplay("Id: {Id}, Name: {Name}, TrackCount: {TrackCount}, ActualTracks: {Tracks.Count}")]
     public class Playlist
     {
@@ -14,7 +11,6 @@ namespace Alify.Core.Models
         public int TrackCount { get; set; }
         public List<Track> Tracks { get; set; } = new();
     }
-
     /// <summary>
     /// Represents a track with its lyrics and moderation status.
     /// </summary>
@@ -23,9 +19,9 @@ namespace Alify.Core.Models
     {
         public FullTrack FullTrack { get; set; }
         public string Lyrics { get; set; }
+        public LyricMapping? MappedLyrics { get; set; }
         public bool IsFlagged { get; set; }
     }
-
     /// <summary>
     /// Represents the current Spotify playback information.
     /// </summary>
@@ -36,6 +32,45 @@ namespace Alify.Core.Models
         public List<Track> Queue { get; set; } = new();
         public int? RemainingTimeMs { get; set; }
     }
+
+    // Queue Cache 
+    public class MusicQueue
+    {
+        public List<Track> Tracks { get; set; } = new();
+        public int CurrentIndex { get; set; } = 0;
+        public DateTime CachedAt { get; set; } = DateTime.UtcNow;
+        public Track CurrentTrack => CurrentIndex < Tracks.Count ? Tracks[CurrentIndex] : Tracks[^1];
+        public bool IsEmpty => Tracks.Count == 0;
+        public bool IsExpired => DateTime.UtcNow - CachedAt > TimeSpan.FromMinutes(3);
+
+        // FIFO queue methods
+        public void EnqueueTrack(Track track)
+        {
+            ArgumentNullException.ThrowIfNull(track);
+            Tracks.Add(track);
+        }
+        public Track DequeueTrack()
+        {
+            if (IsEmpty) throw new InvalidOperationException("Queue is empty.");
+            var track = Tracks[0];
+            Tracks.RemoveAt(0);
+
+            if (CurrentIndex > 0) CurrentIndex--;
+
+            return track;
+        }
+        public void Clear()
+        {
+            Tracks.Clear();
+            CurrentIndex = 0;
+        }
+        public bool MatchesCurrentPlayback(string currentTrackId)
+        {
+            return !IsEmpty && CurrentTrack.FullTrack?.Id == currentTrackId;
+        }
+
+    }
+
 
     /// <summary>
     /// Represents a single line of lyrics with its metadata.
@@ -49,7 +84,6 @@ namespace Alify.Core.Models
         public string Section { get; set; } // e.g., "Verse 1", "Chorus", "Bridge"
         public bool IsAnnotation { get; set; }
     }
-
     /// <summary>
     /// Manages a collection of lyric lines.
     /// </summary>
@@ -57,16 +91,8 @@ namespace Alify.Core.Models
     public class LyricMapping
     {
         private readonly List<LyricLine> _lines = [];
-
         // Read-only property to access the collections
         public IReadOnlyList<LyricLine> Lines => _lines.AsReadOnly();
-
-        /// <summary>
-        /// Adds a lyric line.
-        /// </summary>
-        /// <param name="line">The lyric line to add.</param>
-        /// <exception cref="ArgumentNullException">Thrown when line is null.</exception>
-        /// <exception cref="ArgumentException">Thrown when line number already exists.</exception>
         public void AddLine(LyricLine line)
         {
             ArgumentNullException.ThrowIfNull(line);
@@ -76,12 +102,6 @@ namespace Alify.Core.Models
 
             _lines.Add(line);
         }
-
-        /// <summary>
-        /// Removes a line by line number.
-        /// </summary>
-        /// <param name="lineNumber">The line number to remove.</param>
-        /// <returns>True if the line was found and removed, false otherwise.</returns>
         public bool RemoveLine(int lineNumber)
         {
             var line = _lines.FirstOrDefault(l => l.LineNumber == lineNumber);
@@ -91,20 +111,10 @@ namespace Alify.Core.Models
             _lines.Remove(line);
             return true;
         }
-
-        /// <summary>
-        /// Clears all lines.
-        /// </summary>
         public void Clear()
         {
             _lines.Clear();
         }
-
-        /// <summary>
-        /// Updates an existing line.
-        /// </summary>
-        /// <param name="updatedLine">The updated line.</param>
-        /// <returns>True if the line was found and updated, false otherwise.</returns>
         public bool UpdateLine(LyricLine updatedLine)
         {
             ArgumentNullException.ThrowIfNull(updatedLine);
@@ -121,37 +131,15 @@ namespace Alify.Core.Models
 
             return true;
         }
-
-        /// <summary>
-        /// Gets line numbers for a specific artist.
-        /// </summary>
-        /// <param name="artist">The artist name.</param>
-        /// <returns>A new list of line numbers for the artist, or an empty list if not found.</returns>
         public List<int> GetLineNumbersForArtist(string artist)
         {
-            return _lines.Where(l => l.Artist == artist).Select(l => l.LineNumber).ToList();
+            return [.. _lines.Where(l => l.Artist == artist).Select(l => l.LineNumber)];
         }
-
-        /// <summary>
-        /// Gets line numbers for a specific section.
-        /// </summary>
-        /// <param name="section">The section name.</param>
-        /// <returns>A new list of line numbers for the section, or an empty list if not found.</returns>
         public List<int> GetLineNumbersForSection(string section)
         {
-            return _lines.Where(l => l.Section == section).Select(l => l.LineNumber).ToList();
+            return [.. _lines.Where(l => l.Section == section).Select(l => l.LineNumber)];
         }
-
-        /// <summary>
-        /// Gets all artists mentioned in the lyrics.
-        /// </summary>
-        /// <returns>List of unique artist names.</returns>
-        public List<string> GetArtists() => _lines.Select(l => l.Artist).Where(a => !string.IsNullOrEmpty(a)).Distinct().ToList();
-
-        /// <summary>
-        /// Gets all sections in the lyrics.
-        /// </summary>
-        /// <returns>List of unique section names.</returns>
-        public List<string> GetSections() => _lines.Select(l => l.Section).Where(s => !string.IsNullOrEmpty(s)).Distinct().ToList();
+        public List<string> GetArtists() => [.. _lines.Select(l => l.Artist).Where(a => !string.IsNullOrEmpty(a)).Distinct()];
+        public List<string> GetSections() => [.. _lines.Select(l => l.Section).Where(s => !string.IsNullOrEmpty(s)).Distinct()];
     }
 }

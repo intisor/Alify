@@ -1,4 +1,5 @@
 using Alify.Core.Models;
+using Alify.Features.Spotify.Services;
 using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -8,37 +9,38 @@ namespace Alify.Pages
 {
     public class LyricsViewModel : PageModel
     {
+        private readonly QueueService _queueService;
         private readonly SpotifyService _spotifyService;
-        private readonly LyricService _lyricService;
-        private readonly ArtistLyricService _artistLyricService;
 
-        public LyricsViewModel(SpotifyService spotifyService, LyricService lyricService, ArtistLyricService artistLyricService)
+        public LyricsViewModel(QueueService queueService,SpotifyService spotifyService)
         {
+            _queueService = queueService;
             _spotifyService = spotifyService;
-            _lyricService = lyricService;
-            _artistLyricService = artistLyricService;
         }
 
         public LyricMapping LyricMapping { get; set; }
         public string MainArtist { get; set; }
+        public string TrackName { get; set; }
 
         public async Task<IActionResult> OnGetAsync()
         {
             var spotifyClient = await _spotifyService.GetSpotifyClientAsync();
             if (spotifyClient != null)
             {
-                var playbackInfo = await _spotifyService.GetCurrentPlaybackInfoAsync(spotifyClient);
-                if (playbackInfo?.CurrentlyPlaying?.FullTrack != null)
+                var userId = HttpContext.Session.Id; // Assuming user ID is stored in session
+                var queue = await _queueService.GetQueueAsync(userId,spotifyClient);
+                if (queue == null || queue.IsEmpty) return RedirectToPage("/Index");
+
+                var track = queue.CurrentTrack;
+
+                if (track?.MappedLyrics is not null)
                 {
-                    var track = playbackInfo.CurrentlyPlaying.FullTrack;
-                    var lyrics = await _lyricService.GetLyricsAsync(track.Artists[0].Name, track.Name);
-                    if (!string.IsNullOrEmpty(lyrics))
-                    {
-                        LyricMapping = _artistLyricService.ParseLyricsWithArtistMapping(lyrics);
-                        MainArtist = track.Artists[0].Name;
-                    }
+                    LyricMapping = track.MappedLyrics;
+                    MainArtist = track.FullTrack?.Artists?.FirstOrDefault()?.Name;
+                    TrackName = track.FullTrack?.Name;
                 }
             }
+
             return Page();
         }
     }

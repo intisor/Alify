@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Alify.Features.Spotify.Events;
+using Alify.Features.Spotify.Services;
 
 namespace Alify.Services
 {
@@ -16,6 +17,7 @@ namespace Alify.Services
         private readonly ILogger<SpotifyPlaybackMonitorService> _logger;
         private readonly IMemoryCache _cache;
         private readonly ISpotifySubject _spotifySubject;
+        private readonly QueueService _queueService;
         
         // Monitoring state
         private bool _isMonitoring;
@@ -30,12 +32,13 @@ namespace Alify.Services
             IServiceProvider serviceProvider,
             ILogger<SpotifyPlaybackMonitorService> logger,
             IMemoryCache cache,
-            ISpotifySubject spotifySubject)
+            ISpotifySubject spotifySubject,QueueService queueService)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
             _cache = cache;
             _spotifySubject = spotifySubject;
+            _queueService = queueService;
         }
 
         /// <summary>
@@ -161,8 +164,30 @@ namespace Alify.Services
                     await _spotifySubject.NotifyPlaybackInfoAsync(playbackInfo);
                 }
 
-                // Check for flagged content and skip if necessary
-                await CheckAndSkipFlaggedContentAsync(spotify);
+                // --- INTEGRATE QUEUESERVICE & SEND SSE ---
+         
+                string? userId = null;
+                if (_cache.TryGetValue("SpotifyUserId", out string? cachedUserId) && !string.IsNullOrEmpty(cachedUserId))
+                {
+                    userId = cachedUserId;
+                }
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var skippedTrack = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
+                    if (skippedTrack != null && skippedTrack.IsFlagged)
+                    {
+                        await _spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
+                        _logger.LogInformation("Track skipped and observers notified: {TrackName} by {Artist}",
+                            skippedTrack.FullTrack.Name,
+                            skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("Spotify userId not found in cache. Cannot check queue for flagged songs.");
+                }
+                // --- END QUEUESERVICE INTEGRATION ---
 
                 // Calculate intelligent delay based on remaining time
                 if (playbackInfo?.CurrentlyPlaying != null && playbackInfo.RemainingTimeMs > 2000)
@@ -182,32 +207,6 @@ namespace Alify.Services
             }
 
             return null; // Use base interval
-        }
-
-        /// <summary>
-        /// Checks the currently playing track and skips it if flagged as inappropriate.
-        /// Notifies observers when a track is skipped.
-        /// </summary>
-        private async Task CheckAndSkipFlaggedContentAsync(SpotifyAPI.Web.SpotifyClient spotify)
-        {
-            try
-            {
-                using var scope = _serviceProvider.CreateScope();
-                var spotifyService = scope.ServiceProvider.GetRequiredService<SpotifyService>();
-
-                var skippedTrack = await spotifyService.SkipIfFlaggedAsync(spotify);
-                if (skippedTrack != null)
-                {
-                    await _spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
-                    _logger.LogInformation("Track skipped and observers notified: {TrackName} by {Artist}", 
-                        skippedTrack.FullTrack.Name, 
-                        skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking and skipping flagged content");
-            }
         }
 
         #endregion
