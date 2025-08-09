@@ -2,6 +2,7 @@
 using Alify.Services;
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
+using System.Linq;
 
 namespace Alify.Features.Spotify.Services
 {

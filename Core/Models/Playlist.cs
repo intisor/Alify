@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Linq;
 using SpotifyAPI.Web;
 
 namespace Alify.Core.Models
@@ -41,7 +42,7 @@ namespace Alify.Core.Models
         public DateTime CachedAt { get; set; } = DateTime.UtcNow;
         public Track CurrentTrack => CurrentIndex < Tracks.Count ? Tracks[CurrentIndex] : Tracks[^1];
         public bool IsEmpty => Tracks.Count == 0;
-        public bool IsExpired => DateTime.UtcNow - CachedAt > TimeSpan.FromMinutes(3);
+        public bool IsExpired => DateTime.UtcNow - CachedAt > TimeSpan.FromMinutes(10);
 
         // FIFO queue methods
         public void EnqueueTrack(Track track)

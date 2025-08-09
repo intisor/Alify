@@ -165,13 +165,10 @@ namespace Alify.Services
                 }
 
                 // --- INTEGRATE QUEUESERVICE & SEND SSE ---
-         
-                string? userId = null;
-                if (_cache.TryGetValue("SpotifyUserId", out string? cachedUserId) && !string.IsNullOrEmpty(cachedUserId))
-                {
-                    userId = cachedUserId;
-                }
 
+                var currentUser = await spotify.UserProfile.Current();
+                string userId = currentUser?.Id;
+            
                 if (!string.IsNullOrEmpty(userId))
                 {
                     var skippedTrack = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
@@ -190,9 +187,9 @@ namespace Alify.Services
                 // --- END QUEUESERVICE INTEGRATION ---
 
                 // Calculate intelligent delay based on remaining time
-                if (playbackInfo?.CurrentlyPlaying != null && playbackInfo.RemainingTimeMs > 2000)
+                if (playbackInfo?.CurrentlyPlaying != null && playbackInfo.RemainingTimeMs > 1000)
                 {
-                    var nextCheckMs = playbackInfo.RemainingTimeMs - 2000; // 2s buffer
+                    var nextCheckMs = playbackInfo.RemainingTimeMs - 1000; // 1s buffer (reduced delay)
                     _logger.LogDebug("Next check in {NextCheckSeconds} seconds based on track remaining time", nextCheckMs / 1000.0);
                     return (int)nextCheckMs;
                 }

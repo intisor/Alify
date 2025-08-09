@@ -6,21 +6,26 @@ using Alify.Core.Models;
 using Alify.Core.Infrastructure.Logging;
 using Alify.Extensions;
 using Alify.Services;
+using Alify.Features.Spotify.Services;
+using System.Threading.Tasks;
 
 namespace Alify.Pages
 {
     public class DashboardModel : PageModel
     {
         private readonly SpotifyService _spotifyService;
+        private readonly QueueService _queueService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ILogger<DashboardModel> _logger;
 
         public DashboardModel(
             SpotifyService spotifyService,
+            QueueService queueService,
             IHttpContextAccessor httpContextAccessor,
             ILogger<DashboardModel> logger)
         {
             _spotifyService = spotifyService;
+            _queueService = queueService;
             _httpContextAccessor = httpContextAccessor;
             _logger = logger;
         }
@@ -28,13 +33,23 @@ namespace Alify.Pages
         public string TrackName { get; set; } = string.Empty;
         public string ArtistName { get; set; } = string.Empty;
         public string Lyric { get; set; } = string.Empty;
+        public MusicQueue? Queue { get; private set; }
         public string AlbumArtUrl { get; set; } = string.Empty;
         public string StatusMessage { get; set; } = string.Empty;
         public SpotifyPlaybackInfo PlaybackInfo { get; set; } = new SpotifyPlaybackInfo();
         public bool IsMonitoring { get; set; }
+        public PrivateUser? CurrentUser { get; set; }
 
         public async Task<IActionResult> OnGetAsync()
         {
+            if (!_spotifyService.IsAuthenticated())
+            {
+                _logger.LogWarning("Dashboard accessed without authentication");
+                return RedirectToPage("/Index");
+            }
+            CurrentUser = await _spotifyService.CurrentUserAsync();
+            string userId = CurrentUser?.Id;
+
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
             if (string.IsNullOrEmpty(accessToken))
             {
@@ -57,20 +72,40 @@ namespace Alify.Pages
 
                         if (currentTrackId != null && currentTrackId != lastTrackId)
                         {
-                            PlaybackInfo = await _spotifyService.GetCurrentPlaybackInfoAsync(spotify);
+                            
                             cache.Set("LastTrackId", currentTrackId, TimeSpan.FromMinutes(10));
+                            _queueService.InvalidateQueue(userId);
                             _logger.LogInformation("Track changed, refreshed playback info: {TrackId}", currentTrackId);
-                        }
-                        else
-                        {
-                            PlaybackInfo = await _spotifyService.GetCurrentPlaybackInfoAsync(spotify);
                         }
                     });
                 });
+                Queue = await _queueService.GetQueueAsync(userId, spotify);
+                if (Queue != null)
+                {
+                    _logger.LogInformation("Queue for user {UserId}: {@QueueTracks}", userId, Queue.Tracks.Select(t => new { t.FullTrack.Name, t.FullTrack.Id }));
+                    if (Queue.IsEmpty)
+                    {
+                        StatusMessage = "Your queue is empty.";
+                        _logger.LogInformation("Queue is empty for user {UserId}", userId);
+                    }
+                    else
+                    {
+                        var currentlyPlayingResponse = await this.WithServiceAsync<SpotifyRequestCache, CurrentlyPlaying?>(async requestCache =>
+                        await requestCache.GetCurrentlyPlayingAsync(spotify));
 
+                        PlaybackInfo = new SpotifyPlaybackInfo
+                        {
+                            CurrentlyPlaying = Queue.CurrentTrack,
+                            Queue = [.. Queue.Tracks.Skip(1)],
+                            RemainingTimeMs = currentlyPlayingResponse?.ProgressMs != null && Queue.CurrentTrack.FullTrack.DurationMs != null
+                                ? Queue.CurrentTrack.FullTrack.DurationMs - currentlyPlayingResponse.ProgressMs
+                                : null
+                        }; 
+                    }
+                }
                 if (PlaybackInfo?.CurrentlyPlaying?.FullTrack != null)
                 {
-                    var track = PlaybackInfo.CurrentlyPlaying;
+                    Track track = PlaybackInfo.CurrentlyPlaying;
                     TrackName = track.FullTrack.Name;
                     ArtistName = track.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
                     AlbumArtUrl = track.FullTrack.Album.Images.FirstOrDefault()?.Url ?? string.Empty;
@@ -180,6 +215,24 @@ namespace Alify.Pages
 
             try
             {
+                CurrentUser = await _spotifyService.CurrentUserAsync();
+                string userId = CurrentUser?.Id;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    StatusMessage = "Unable to retrieve user information. Please login to Spotify first.";
+                    _logger.LogWarning("Refresh data attempted without valid user ID");
+                    return Page();
+                }
+
+                var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
+                var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
+
+                MusicQueue existingQueue = null;
+                this.WithService<IMemoryCache>(cache =>
+                {
+                    var cacheKey = GetUserSpecificCacheKey("queue_" + userId);
+                })
+
                 this.WithService<IMemoryCache>(cache =>
                 {
                     var cacheKey = GetUserSpecificCacheKey("PlaybackInfo");
@@ -216,19 +269,30 @@ namespace Alify.Pages
 
             try
             {
+                CurrentUser = await _spotifyService.CurrentUserAsync();
+                string userId = CurrentUser?.Id;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    StatusMessage = "Unable to retrieve user information for lyrics analysis.";
+                    return Page();
+                }
+
                 var analysisResult = await this.WithServiceAsync<LyricService, string>(async lyricService =>
                 {
                     var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                     var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
-                    var playbackInfo = await _spotifyService.GetCurrentPlaybackInfoAsync(spotify);
-                    if (playbackInfo?.CurrentlyPlaying?.FullTrack == null)
-                        return "No track currently playing for analysis.";
+                    var queue = _queueService.GetQueueAsync(userId,spotify);
 
-                    var track = playbackInfo.CurrentlyPlaying.FullTrack;
+                    if (queue == null || queue.Result.IsEmpty)  return "Your queue is empty. Please add tracks to analyze lyrics.";
+
+
+                    var track = queue.Result.CurrentTrack.FullTrack;
                     var artistName = track.Artists.FirstOrDefault()?.Name ?? "Unknown";
                     var lyrics = await lyricService.GetLyricsAsync(artistName, track.Name);
                     if (string.IsNullOrEmpty(lyrics))
+                    {
                         return "No lyrics found for current track.";
+                    }
 
                     return await this.WithServiceAsync<ArtistLyricService, string>(async artistLyricService =>
                     {
@@ -253,9 +317,10 @@ namespace Alify.Pages
             return Page();
         }
 
-        private string GetUserSpecificCacheKey(string baseKey)
-        {
-            var userId = _httpContextAccessor.HttpContext?.Session.Id ?? "anonymous";
+        private async Task<string> GetUserSpecificCacheKey(string baseKey)
+        { 
+            CurrentUser = await _spotifyService.CurrentUserAsync().Id;
+            var userId =
             return $"{baseKey}_{userId}";
         }
     }

@@ -42,6 +42,11 @@ namespace Alify.Services
 
         public async Task<string?> GetLyricsAsync(string artist, string title)
         {
+            if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(title))
+            {
+                _logger.LogWarning("Artist or title is empty. Skipping Genius API call.");
+                return null;
+            }
             string cacheKey = $"lyrics_{artist}_{title}";
             if (_cache.TryGetValue(cacheKey, out string? cachedLyrics))
             {

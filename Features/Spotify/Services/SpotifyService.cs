@@ -10,6 +10,7 @@ using Alify.Services;
 using Serilog;
 using Alify.Core.Models;
 using Alify.Features.Spotify.Events;
+using Alify.Features.Spotify.Services;
 
 [DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
@@ -21,6 +22,7 @@ public class SpotifyService
     private readonly IMemoryCache _cache;
     private readonly SpotifyRequestCache _requestCache;
     private readonly ISpotifySubject _spotifySubject;
+    private readonly QueueService _queueService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpotifyService"/> class.
@@ -36,7 +38,8 @@ public class SpotifyService
         LyricService lyricService,
         IMemoryCache cache,
         SpotifyRequestCache requestCache,
-        ISpotifySubject spotifySubject)
+        ISpotifySubject spotifySubject,
+        QueueService queueService)
     {
         _spotifyOptions = spotifyOptions.Value;
         _httpContextAccessor = httpContextAccessor;
@@ -44,6 +47,7 @@ public class SpotifyService
         _cache = cache;
         _requestCache = requestCache;
         _spotifySubject = spotifySubject;
+        _queueService = queueService;
     }
 
     // Defensive null check for HttpContext and Session
@@ -301,24 +305,35 @@ public class SpotifyService
     /// </remarks>
     public async Task<SpotifyPlaybackInfo?> GetCurrentPlaybackInfoAsync(SpotifyClient spotify)
     {
-        // Get the currently playing track using the request cache
-        // The request cache adds another layer of caching at the API call level
+        _cache.TryGetValue("SpotifyUserId", out string? userId);
+        if (string.IsNullOrEmpty(userId))
+        {
+            var user = await CurrentUserAsync();
+            userId = user?.Id;
+        }
+        _cache.Set("SpotifyUserId", userId, TimeSpan.FromHours(1));
+
+
         var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
         if (currentlyPlayingResponse?.Item is not FullTrack currentTrack) return null;
 
-        // Get the upcoming tracks in the queue
-        var queueResponse = await _requestCache.GetQueueAsync(spotify);
-        
-        // Process each track in the queue to add lyrics and moderation info, limiting to the next 10 tracks.
-        var queueTasks = queueResponse?.Queue.OfType<FullTrack>().Take(10).Select(CreateTrackFromFullTrackAsync) ?? Enumerable.Empty<Task<Track>>();
+        var isQueueValid = await _queueService.ValidateQueueAsync(userId, spotify);
+        if (!isQueueValid)
+        {
+            Log.Logger.Warning("SpotifyService: Queue validation failed for user {UserId}. Rebuilding queue.", userId);
+            _queueService.InvalidateQueue(userId);
+        }
 
-        // Build the complete playback info object
+        var queue = await _queueService.GetQueueAsync(userId, spotify);
+        if (queue == null || queue.IsEmpty) return null;
         var playbackInfo = new SpotifyPlaybackInfo
         {
-            CurrentlyPlaying = await CreateTrackFromFullTrackAsync(currentTrack),
+            CurrentlyPlaying = queue.CurrentTrack ?? await CreateTrackFromFullTrackAsync(currentTrack),
             RemainingTimeMs = currentTrack.DurationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
-            Queue = (await Task.WhenAll(queueTasks)).ToList()
+            Queue = [.. queue.Tracks.Skip(1)], 
         };
+        await _spotifySubject.NotifyPlaybackInfoAsync(playbackInfo);
+        Log.Logger.Debug("Notified observers of playback change");
 
         return playbackInfo;
     }
@@ -334,44 +349,33 @@ public class SpotifyService
     /// </remarks>
     public async Task<Track?> SkipIfFlaggedAsync(SpotifyClient spotify)
     {
-        var playbackInfo = await GetCurrentPlaybackInfoAsync(spotify);
-        if (playbackInfo == null)
+        _cache.TryGetValue("SpotifyUserId", out string? userId);
+        if (string.IsNullOrEmpty(userId))
         {
-            Log.Logger.Warning("SkipIfFlaggedAsync: No playback info available.");
-            return null;
+            var user = await CurrentUserAsync();
+            userId = user?.Id;
         }
-        if (playbackInfo.CurrentlyPlaying == null)
+
+        var skippedTrack = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
+        if (skippedTrack != null && skippedTrack.IsFlagged)
         {
-            Log.Logger.Warning("SkipIfFlaggedAsync: No track is currently playing.");
-            return null;
-        }
-        if (playbackInfo.CurrentlyPlaying.IsFlagged)
-        {
-            var trackToSkip = playbackInfo.CurrentlyPlaying;
-            Log.Logger.Information("SkipIfFlaggedAsync: Skipping flagged track: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
-            try
-            {   
-                await spotify.Player.SkipNext();
-                await _spotifySubject.NotifyTrackSkippedEventAsync(trackToSkip);
-                return trackToSkip;
-            }
-            catch (Exception ex)
-            {
-                Log.Logger.Error(ex, "SkipIfFlaggedAsync: Failed to skip track due to Spotify API error.");
-                return null;
-            }
-            finally
-            {
-                _requestCache.ClearCache();
-            }
+            Log.Logger.Information("SkipIfFlaggedAsync: Skipped flagged track: {TrackName} by {Artist}", skippedTrack.FullTrack.Name, skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
+            await _spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
+
+            return skippedTrack;
         }
         else
         {
-            Log.Logger.Information("SkipIfFlaggedAsync: Track is not flagged: {TrackName} by {Artist}", playbackInfo.CurrentlyPlaying.FullTrack.Name, playbackInfo.CurrentlyPlaying.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
+            Log.Logger.Information("SkipIfFlaggedAsync: No flagged track to skip.");
             return null;
         }
     }
 
+    public async Task<PrivateUser> CurrentUserAsync()
+    {
+        SpotifyClient client = await GetSpotifyClientAsync();
+        return await client.UserProfile.Current();
+    }
     /// <summary>
     /// Creates a user-specific cache key using the session ID.
     /// </summary>
