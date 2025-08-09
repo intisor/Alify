@@ -1,18 +1,24 @@
 using Alify.Controllers;
 using Alify.Core.Infrastructure.Doppler;
 using Alify.Core.Models;
-using Alify.Features.Spotify.Services;
 using Alify.Features.Spotify.Events;
+using Alify.Features.Spotify.Services;
+using Alify.Services;
+using Microsoft.Extensions.Options;
 using Serilog;
 using SpotifyAPI.Web;
-using Alify.Services;
+using System.Security.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Serilog
 Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
     .WriteTo.Console()
     .CreateLogger();
-		builder.Host.UseSerilog();
+
+builder.Host.UseSerilog();
 
 var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 						 builder.Configuration.AddDoppler(dopplerToken);
@@ -62,7 +68,7 @@ var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 		builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
 		builder.Services.Configure<SpotifyOptions>(builder.Configuration.GetSection("Spotify"));
 		builder.Services.AddSingleton<SpotifyService>();
-		builder.Services.AddHttpClient<LyricService>();
+		//builder.Services.AddHttpClient<LyricService>();
 		builder.Services.AddHttpContextAccessor();
 		builder.Services.AddSingleton<ArtistLyricService>();
 		builder.Services.AddSingleton(SpotifyClientConfig.CreateDefault());
@@ -79,6 +85,27 @@ var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 		// Register the unified Spotify playback monitoring service (replaces both SpotifyBackgroundService and SpotifyQueueMonitorService)
 		builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
 		builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetRequiredService<SpotifyPlaybackMonitorService>());
+
+		// Configure a dedicated HttpClient for LyricService with modern SSL protocols
+		builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>
+		{
+			var apiKeys = serviceProvider.GetRequiredService<IOptions<ApiKeys>>().Value;
+			// You can set base addresses or default headers here if needed
+		})
+		.ConfigurePrimaryHttpMessageHandler(() =>
+		{
+			return new SocketsHttpHandler
+			{
+				SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+				{
+					// Use modern, secure TLS protocols. Tls12 and Tls13 are standard.
+					// SslProtocols.None allows the OS to choose the best protocol.
+					EnabledSslProtocols = SslProtocols.None
+				},
+				// Allow the connection to be reused
+				PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+			};
+		});
 
 var app = builder.Build();
 

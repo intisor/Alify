@@ -63,7 +63,7 @@ namespace Alify.Services
                 await page.GotoAsync(songUrl, new PageGotoOptions
                 {
                     WaitUntil = WaitUntilState.DOMContentLoaded,
-                    Timeout = 60000
+                    Timeout = 30000
                 });
                 await page.WaitForSelectorAsync("div[class*='Lyrics__Container']", new PageWaitForSelectorOptions { Timeout = 60000 });
 

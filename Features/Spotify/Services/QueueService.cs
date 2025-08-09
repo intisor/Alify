@@ -45,7 +45,7 @@ namespace Alify.Features.Spotify.Services
 					newQueue.EnqueueTrack(await BuildTrackAsync(track));
 				}
 			}
-			_cache.Set(cacheKey, newQueue, TimeSpan.FromMinutes(7));
+			_cache.Set(cacheKey, newQueue, TimeSpan.FromMinutes(11));
 			newQueue.CachedAt = DateTime.UtcNow;
 			_logger.LogInformation("Queue for user {UserId} built with {TrackCount} tracks.", userId, newQueue.Tracks.Count);
 			return newQueue;
@@ -104,7 +104,7 @@ namespace Alify.Features.Spotify.Services
                 var queue = await GetQueueAsync(userId, spotify);
                 if (queue == null || queue.IsEmpty) return null;
 
-                if (queue.CurrentTrack.IsFlagged)
+                if (queue.CurrentTrack.IsFlagged || queue.CurrentTrack.FullTrack.Explicit) 
                 {
                     _logger.LogInformation("Skipping flagged track: {TrackName}", queue.CurrentTrack.FullTrack.Name);
                     await spotify.Player.SkipNext();

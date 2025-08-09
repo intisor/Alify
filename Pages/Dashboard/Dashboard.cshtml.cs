@@ -1,3 +1,4 @@
+#nullable enable
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SpotifyAPI.Web;
@@ -8,13 +9,14 @@ using Alify.Extensions;
 using Alify.Services;
 using Alify.Features.Spotify.Services;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace Alify.Pages
 {
     public class DashboardModel : PageModel
     {
         private readonly SpotifyService _spotifyService;
-        private readonly QueueService _queueService;
+        private readonly QueueService _queueService;    
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly ILogger<DashboardModel> _logger;
 
@@ -48,12 +50,12 @@ namespace Alify.Pages
                 return RedirectToPage("/Index");
             }
             CurrentUser = await _spotifyService.CurrentUserAsync();
-            string userId = CurrentUser?.Id;
+            string? userId = CurrentUser?.Id;
 
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
-            if (string.IsNullOrEmpty(accessToken))
+            if (string.IsNullOrEmpty(accessToken) || userId == null)
             {
-                _logger.LogWarning("Dashboard accessed without authentication");
+                _logger.LogWarning("Dashboard accessed without authentication or user ID.");
                 return RedirectToPage("/Index");
             }
 
@@ -96,8 +98,8 @@ namespace Alify.Pages
                         PlaybackInfo = new SpotifyPlaybackInfo
                         {
                             CurrentlyPlaying = Queue.CurrentTrack,
-                            Queue = [.. Queue.Tracks.Skip(1)],
-                            RemainingTimeMs = currentlyPlayingResponse?.ProgressMs != null && Queue.CurrentTrack.FullTrack.DurationMs != null
+                            Queue = [.. Queue.Tracks.Skip(Queue.CurrentIndex + 1)],
+                            RemainingTimeMs = (currentlyPlayingResponse?.ProgressMs is not null && Queue.CurrentTrack.FullTrack.DurationMs > 0)
                                 ? Queue.CurrentTrack.FullTrack.DurationMs - currentlyPlayingResponse.ProgressMs
                                 : null
                         }; 
@@ -216,7 +218,7 @@ namespace Alify.Pages
             try
             {
                 CurrentUser = await _spotifyService.CurrentUserAsync();
-                string userId = CurrentUser?.Id;
+                string? userId = CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId))
                 {
                     StatusMessage = "Unable to retrieve user information. Please login to Spotify first.";
@@ -234,7 +236,7 @@ namespace Alify.Pages
                 var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                 var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
 
-                MusicQueue existingQueue = null;
+                MusicQueue? existingQueue = null;
                 this.WithService<IMemoryCache>(cache =>
                 {
                     var cacheKey = $"queue_{userId}";
@@ -263,7 +265,6 @@ namespace Alify.Pages
                         var cacheKey = $"queue_{userId}";
                         this.WithService<IMemoryCache>(cache =>
                         {
-                            var cacheKey = $"queue_{userId}";
                             cache.Remove(cacheKey);
                             StatusMessage = "Queue was out of sync. Refreshed all data.";
                             HighPerformanceLogging.LogMemoryCacheCleared(_logger);
@@ -290,14 +291,17 @@ namespace Alify.Pages
                         
                         var currentTrackAsTrackObject = await _queueService.GetTrackFromQueueAsync(userId, currentTrack.Id, spotify);
 
-                        existingQueue = await _queueService.SyncWithCurrentPlaybackAsync(userId, existingQueue, currentTrackAsTrackObject, queueTracks);
-
-                        // Update the cache with synced queue
-                        this.WithService<IMemoryCache>(cache =>
+                        if (existingQueue != null && currentTrackAsTrackObject != null)
                         {
-                            var cacheKey = $"queue_{userId}";
-                            cache.Set(cacheKey, existingQueue, TimeSpan.FromMinutes(30));
-                        });
+                            existingQueue = await _queueService.SyncWithCurrentPlaybackAsync(userId, existingQueue, currentTrackAsTrackObject, queueTracks);
+
+                            // Update the cache with synced queue
+                            this.WithService<IMemoryCache>(cache =>
+                            {
+                                var cacheKey = $"queue_{userId}";
+                                cache.Set(cacheKey, existingQueue, TimeSpan.FromMinutes(30));
+                            });
+                        }
 
                         StatusMessage = "Queue synchronized with current playback.";
                     }
@@ -338,7 +342,7 @@ namespace Alify.Pages
             try
             {
                 CurrentUser = await _spotifyService.CurrentUserAsync();
-                string userId = CurrentUser?.Id;
+                string? userId = CurrentUser?.Id;
                 if (string.IsNullOrEmpty(userId))
                 {
                     StatusMessage = "Unable to retrieve user information for lyrics analysis.";
@@ -349,12 +353,12 @@ namespace Alify.Pages
                 {
                     var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                     var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
-                    var queue = _queueService.GetQueueAsync(userId,spotify);
+                    var queue = await _queueService.GetQueueAsync(userId,spotify);
 
-                    if (queue == null || queue.Result.IsEmpty)  return "Your queue is empty. Please add tracks to analyze lyrics.";
+                    if (queue == null || queue.IsEmpty)  return "Your queue is empty. Please add tracks to analyze lyrics.";
 
 
-                    var track = queue.Result.CurrentTrack.FullTrack;
+                    var track = queue.CurrentTrack.FullTrack;
                     var artistName = track.Artists.FirstOrDefault()?.Name ?? "Unknown";
                     var lyrics = await lyricService.GetLyricsAsync(artistName, track.Name);
                     if (string.IsNullOrEmpty(lyrics))
