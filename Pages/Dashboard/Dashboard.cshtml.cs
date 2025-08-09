@@ -224,21 +224,89 @@ namespace Alify.Pages
                     return Page();
                 }
 
+                var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    StatusMessage = "Authentication required. Please login to Spotify first.";
+                    return Page();
+                }
+
                 var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                 var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
 
                 MusicQueue existingQueue = null;
                 this.WithService<IMemoryCache>(cache =>
                 {
-                    var cacheKey = GetUserSpecificCacheKey("queue_" + userId);
-                })
-
-                this.WithService<IMemoryCache>(cache =>
-                {
-                    var cacheKey = GetUserSpecificCacheKey("PlaybackInfo");
-                    cache.Remove(cacheKey);
-                    HighPerformanceLogging.LogMemoryCacheCleared(_logger);
+                    var cacheKey = $"queue_{userId}";
+                    cache.TryGetValue(cacheKey, out existingQueue);
                 });
+
+                var currentlyPlayingResponse = await this.WithServiceAsync<SpotifyRequestCache, CurrentlyPlaying?>(
+                    async requestCache => await requestCache.GetCurrentlyPlayingAsync(spotify));
+
+                if (currentlyPlayingResponse?.Item is not FullTrack currentTrack)
+                {
+                    StatusMessage = "No Track is currently Playing";
+                    return Page();
+                }
+
+                bool currentTrackChanged = existingQueue == null || !existingQueue.MatchesCurrentPlayback(currentTrack.Id);
+
+                if (currentTrackChanged) 
+                {
+                    _logger.LogInformation("Current track changed, validating queue");
+
+                    var isValid = await _queueService.ValidateQueueAsync(userId, spotify);
+                    if (!isValid)
+                    {
+                        _queueService.InvalidateQueue(userId);
+                        var cacheKey = $"queue_{userId}";
+                        this.WithService<IMemoryCache>(cache =>
+                        {
+                            var cacheKey = $"queue_{userId}";
+                            cache.Remove(cacheKey);
+                            StatusMessage = "Queue was out of sync. Refreshed all data.";
+                            HighPerformanceLogging.LogMemoryCacheCleared(_logger);
+                        });
+                    }
+                    else
+                    {
+                        // Track changed but queue is valid - sync queue with current playback
+                        var queueResponse = await this.WithServiceAsync<SpotifyRequestCache, QueueResponse?>(
+                            async requestCache => await requestCache.GetQueueAsync(spotify));
+
+                        var queueTracks = new List<Track>();
+                        if (queueResponse?.Queue != null)
+                        {
+                            foreach (var item in queueResponse.Queue.OfType<FullTrack>())
+                            {
+                                var track = await _queueService.GetTrackFromQueueAsync(userId, item.Id, spotify);
+                                if (track != null)
+                                {
+                                    queueTracks.Add(track);
+                                }
+                            }
+                        }
+                        
+                        var currentTrackAsTrackObject = await _queueService.GetTrackFromQueueAsync(userId, currentTrack.Id, spotify);
+
+                        existingQueue = await _queueService.SyncWithCurrentPlaybackAsync(userId, existingQueue, currentTrackAsTrackObject, queueTracks);
+
+                        // Update the cache with synced queue
+                        this.WithService<IMemoryCache>(cache =>
+                        {
+                            var cacheKey = $"queue_{userId}";
+                            cache.Set(cacheKey, existingQueue, TimeSpan.FromMinutes(30));
+                        });
+
+                        StatusMessage = "Queue synchronized with current playback.";
+                    }
+                }
+                else
+                {
+                    StatusMessage = "Queue is up to date. No changes detected.";
+                    _logger.LogInformation("Queue validation: Current track unchanged");
+                }
 
                 this.WithService<SpotifyRequestCache>(requestCache =>
                 {
@@ -319,9 +387,9 @@ namespace Alify.Pages
 
         private async Task<string> GetUserSpecificCacheKey(string baseKey)
         { 
-            CurrentUser = await _spotifyService.CurrentUserAsync().Id;
-            var userId =
-            return $"{baseKey}_{userId}";
+            CurrentUser = await _spotifyService.CurrentUserAsync();
+            var userId = CurrentUser?.Id;
+            return $"{userId}_{baseKey}";
         }
     }
 }

@@ -50,7 +50,6 @@ namespace Alify.Features.Spotify.Services
 			_logger.LogInformation("Queue for user {UserId} built with {TrackCount} tracks.", userId, newQueue.Tracks.Count);
 			return newQueue;
 		}
-
 		private async Task<Track> BuildTrackAsync(FullTrack track)
 		{
 			var artist = track.Artists.FirstOrDefault()?.Name ?? string.Empty;
@@ -67,7 +66,6 @@ namespace Alify.Features.Spotify.Services
 
 			return queueTrack;
 		}
-
 		public async Task<bool> ValidateQueueAsync(string userId, SpotifyClient spotify)
 		{
 			var queue = await GetQueueAsync(userId, spotify);
@@ -121,6 +119,65 @@ namespace Alify.Features.Spotify.Services
             {
                 _queueSemaphore.Release();
             }
+        }
+		public async Task<MusicQueue> SyncWithCurrentPlaybackAsync(string userId,MusicQueue existingQueue,Track currentTrack, List<Track> queueTracks)
+		{
+            if (existingQueue == null)
+            {
+                // Create a new queue if none exists
+                existingQueue = new MusicQueue { Tracks = [currentTrack], CurrentIndex = 0, CachedAt = DateTime.UtcNow };
+                existingQueue.Tracks.AddRange(queueTracks);
+                return existingQueue;
+            }
+
+            if (existingQueue.CurrentTrack.FullTrack.Id == currentTrack.FullTrack.Id)
+            {
+        
+                var updatedTracks = new List<Track> { currentTrack };
+                updatedTracks.AddRange(queueTracks);
+				existingQueue.Tracks = updatedTracks;
+                existingQueue.CurrentIndex = 0;
+
+                return existingQueue;
+            }
+            // adjusting queue
+            for (int i = 0; i < existingQueue.Tracks.Count; i++)
+            {
+                if (existingQueue.Tracks[i].FullTrack.Id == currentTrack.FullTrack.Id)
+                {
+                    // Found the current track in the existing queue
+                    existingQueue.CurrentIndex = i;
+
+					existingQueue.Tracks[i] = currentTrack; // Update the current track
+
+                    if (queueTracks.Count > 0)
+                    {
+                        // The current track is at index 'i'. The tracks after it might be out of sync.
+                        // We'll remove the old upcoming tracks and add the new ones from the fresh API call.
+
+                        // Check if there are any tracks after the current one in the existing queue.
+                        if (i < existingQueue.Tracks.Count - 1)
+                        {
+                            // Remove all tracks from the one after the current track to the end.
+                            existingQueue.Tracks.RemoveRange(i + 1, existingQueue.Tracks.Count - (i + 1));
+                        }
+
+                        // Now, add the fresh list of upcoming tracks.
+                        existingQueue.Tracks.AddRange(queueTracks);
+                    }
+                    return existingQueue;
+                }
+            }
+
+            var newQueue = new MusicQueue
+            {
+                Tracks = new List<Track> { currentTrack },
+                CurrentIndex = 0,
+                CachedAt = DateTime.UtcNow
+            };
+            newQueue.Tracks.AddRange(queueTracks);
+
+			return newQueue;
         }
     }
 }
