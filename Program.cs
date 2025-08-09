@@ -85,9 +85,14 @@ var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 		// Register the unified Spotify playback monitoring service (replaces both SpotifyBackgroundService and SpotifyQueueMonitorService)
 		builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
 		builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetRequiredService<SpotifyPlaybackMonitorService>());
+		builder.Services.Configure<PlaybackMonitorOptions>(options => {
+			// Optional customizations
+			options.PostSkipCheckDelayMs = 800; // Very quick check after skips
+			options.ActivePlaybackPollingIntervalMs = 4000; // More frequent checks during active playback
+		});
 
-		// Configure a dedicated HttpClient for LyricService with modern SSL protocols
-		builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>
+// Configure a dedicated HttpClient for LyricService with modern SSL protocols
+builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>
 		{
 			var apiKeys = serviceProvider.GetRequiredService<IOptions<ApiKeys>>().Value;
 			// You can set base addresses or default headers here if needed
