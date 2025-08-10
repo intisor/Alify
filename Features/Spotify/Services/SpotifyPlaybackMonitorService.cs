@@ -430,7 +430,6 @@ internal sealed record MonitoringState
     public bool IsMonitoring { get; set; }
     public bool IsRunning { get; set; }
 }
-
 internal sealed record AuthenticationManager(ILogger Logger)
 {
     private DateTime _lastAuthWarning = DateTime.MinValue;
@@ -447,7 +446,6 @@ internal sealed record AuthenticationManager(ILogger Logger)
         }
     }
 }
-
 internal sealed record TrackingState
 {
     public int ConsecutiveErrorCount { get; private set; }
@@ -474,7 +472,6 @@ internal sealed record TrackingState
         }
     }
 }
-
 internal sealed record EdgeCaseState
 {
     public int ConsecutiveShortRemainingCount { get; private set; }
