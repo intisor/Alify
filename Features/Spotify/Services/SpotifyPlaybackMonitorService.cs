@@ -9,7 +9,7 @@ namespace Alify.Services
     /// <summary>
     /// A comprehensive service that monitors Spotify playback in the background,
     /// automatically skips flagged content, and broadcasts real-time updates via SSE.
-    /// Combines background monitoring with content filtering functionality.
+    /// Enhanced with edge case handling for improved reliability and responsiveness.
     /// </summary>
     [DebuggerDisplay("IsMonitoring: {_isMonitoring}, IsRunning: {_isRunning}, AuthWarningCooldown: {_authWarningCooldown.TotalMinutes}min")]
     public class SpotifyPlaybackMonitorService : BackgroundService
@@ -36,6 +36,15 @@ namespace Alify.Services
         private DateTime _lastSkipTime = DateTime.MinValue;
         private DateTime _lastPlaybackInfoUpdate = DateTime.MinValue;
         private string _lastTrackId = string.Empty;
+        
+        // Edge case handling state
+        private int _consecutiveShortRemainingCount = 0;
+        private bool _wasPausedLastCheck = false;
+        private DateTime _lastTrackChangeDetection = DateTime.MinValue;
+        private int _pausedPollingAttempts = 0;
+        private DateTime _lastSuccessfulPoll = DateTime.MinValue;
+        // User skip detection
+        private int _previousTrackRemainingMs = 0;
 
         public SpotifyPlaybackMonitorService(
             IServiceProvider serviceProvider,
@@ -53,10 +62,11 @@ namespace Alify.Services
             _options = options?.Value ?? new PlaybackMonitorOptions();
             
             // Log the configured polling intervals for debugging
-            _logger.LogDebug("Playback Monitor configured with: Active={Active}ms, Paused={Paused}ms, PostSkip={PostSkip}ms",
+            _logger.LogDebug("Enhanced Playback Monitor configured with: Active={Active}ms, Paused={Paused}ms, PostSkip={PostSkip}ms, ShortRemaining={ShortRemaining}ms",
                 _options.ActivePlaybackPollingIntervalMs,
                 _options.PausedPlaybackPollingIntervalMs,
-                _options.PostSkipCheckDelayMs);
+                _options.PostSkipCheckDelayMs,
+                _options.ShortRemainingTrackPollingMs);
         }
 
         /// <summary>
@@ -74,7 +84,7 @@ namespace Alify.Services
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _isRunning = true;
-            _logger.LogInformation("Spotify Playback Monitor Service started");
+            _logger.LogInformation("Enhanced Spotify Playback Monitor Service started");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -89,24 +99,24 @@ namespace Alify.Services
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Spotify Playback Monitor Service is stopping");
+                    _logger.LogInformation("Enhanced Spotify Playback Monitor Service is stopping");
                     break;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error in Spotify Playback Monitor Service");
+                    _logger.LogError(ex, "Error in Enhanced Spotify Playback Monitor Service");
                     _consecutiveErrorCount++;
                     await Task.Delay(CalculateErrorBackoffDelay(), stoppingToken);
                 }
             }
 
             _isRunning = false;
-            _logger.LogInformation("Spotify Playback Monitor Service stopped");
+            _logger.LogInformation("Enhanced Spotify Playback Monitor Service stopped");
         }
 
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Spotify Playback Monitor Service is stopping");
+            _logger.LogInformation("Enhanced Spotify Playback Monitor Service is stopping");
             _isRunning = false;
             await base.StopAsync(cancellationToken);
         }
@@ -185,10 +195,12 @@ namespace Alify.Services
             {
                 // Reset error count on successful API call
                 _consecutiveErrorCount = 0;
+                _lastSuccessfulPoll = DateTime.UtcNow;
                 
                 // Get current playback info
                 var playbackInfo = await spotifyService.GetCurrentPlaybackInfoAsync(spotify);
                 bool trackChanged = false;
+                bool playbackStateChanged = false;
                 
                 if (playbackInfo?.CurrentlyPlaying != null)
                 {
@@ -196,24 +208,78 @@ namespace Alify.Services
                     trackChanged = currentTrackId != _lastTrackId;
                     _lastTrackId = currentTrackId;
                     
-                    // Track state for adaptive polling
-                    _wasPlayingLastCheck = true;
+                    // User skip detection logic
+                    if (trackChanged)
+                    {
+                        // If previous track had significant time left, treat as skip
+                        if (_previousTrackRemainingMs > _options.SkipDetectionRemainingTimeThresholdMs)
+                        {
+                            _logger.LogInformation("Detected possible manual skip (remaining ms: {Remaining})", (object)_previousTrackRemainingMs);
+                            // Optionally notify observers here, e.g.:
+                            // await _spotifySubject.NotifyTrackSkippedEventAsync(playbackInfo.CurrentlyPlaying);
+                        }
+                        _previousTrackRemainingMs = playbackInfo.RemainingTimeMs ?? 0;
+                    }
+                    else if (playbackInfo?.RemainingTimeMs != null)
+                    {
+                        _previousTrackRemainingMs = playbackInfo.RemainingTimeMs.Value;
+                    }
+                    
+                    // Detect track changes for edge case handling
+                    if (trackChanged)
+                    {
+                        _lastTrackChangeDetection = DateTime.UtcNow;
+                        _consecutiveShortRemainingCount = 0; // Reset short remaining counter on track change
+                        _pausedPollingAttempts = 0; // Reset paused polling attempts
+                        _logger.LogDebug("Track changed detected: {TrackName}", playbackInfo.CurrentlyPlaying.FullTrack.Name);
+                    }
+                    
+                    // Track playback state changes
+                    bool isCurrentlyPlaying = playbackInfo.RemainingTimeMs > 0 && playbackInfo.CurrentlyPlaying != null;
+                    playbackStateChanged = isCurrentlyPlaying != _wasPlayingLastCheck;
+                    _wasPlayingLastCheck = isCurrentlyPlaying;
+                    
+                    // Handle pause state transitions
+                    if (playbackStateChanged)
+                    {
+                        if (!isCurrentlyPlaying)
+                        {
+                            _wasPausedLastCheck = true;
+                            _pausedPollingAttempts = 0;
+                            _logger.LogDebug("Playback paused detected");
+                        }
+                        else
+                        {
+                            _wasPausedLastCheck = false;
+                            _pausedPollingAttempts = 0;
+                            _logger.LogDebug("Playback resumed detected");
+                        }
+                    }
                 }
                 else
                 {
+                    // No current playback
+                    if (_wasPlayingLastCheck)
+                    {
+                        playbackStateChanged = true;
+                        _logger.LogDebug("Playback stopped detected");
+                    }
                     _wasPlayingLastCheck = false;
+                    _wasPausedLastCheck = false;
                 }
 
-                // Send SSE updates if we have new information or if sufficient time has passed
+                // Send SSE updates with enhanced logic
                 bool shouldSendUpdate = playbackInfo != null && 
                     (trackChanged || 
+                     playbackStateChanged ||
                      (DateTime.UtcNow - _lastPlaybackInfoUpdate).TotalMilliseconds > _options.MinimumSSEUpdateIntervalMs);
                 
                 if (shouldSendUpdate)
                 {
                     await _spotifySubject.NotifyPlaybackInfoAsync(playbackInfo);
                     _lastPlaybackInfoUpdate = DateTime.UtcNow;
-                    _logger.LogDebug("Sent playback info SSE update");
+                    _logger.LogDebug("Sent enhanced playback info SSE update (trackChanged: {TrackChanged}, stateChanged: {StateChanged})", 
+                        trackChanged, playbackStateChanged);
                 }
 
                 // Prioritize skip detection - critical for content filtering
@@ -247,24 +313,10 @@ namespace Alify.Services
                     _logger.LogWarning("Spotify userId not found but track changed. Cannot check queue for flagged songs.");
                 }
 
-                // Calculate intelligent delay based on remaining time
+                // Enhanced intelligent delay calculation with edge case handling
                 if (playbackInfo?.CurrentlyPlaying != null && playbackInfo.RemainingTimeMs > 0)
                 {
-                    // Calculate adaptive buffer based on track length
-                    int bufferMs = Math.Max(
-                        (int)(playbackInfo.RemainingTimeMs * _options.TrackEndBufferPercentage),
-                        _options.MinimumTrackEndBufferMs);
-                    
-                    // Ensure we have at least minimum polling interval
-                    var nextCheckMs = Math.Max(
-                        (byte)(playbackInfo.RemainingTimeMs - bufferMs),
-                        _options.MinimumPollingIntervalMs);
-                    
-                    // Cap the max delay
-                    nextCheckMs = Math.Min(nextCheckMs, _options.MaximumPollingIntervalMs);
-                    
-                    _logger.LogDebug("Next check in {NextCheckSeconds}s based on track remaining time", nextCheckMs / 1000.0);
-                    return (int)nextCheckMs;
+                    return CalculateIntelligentDelay(playbackInfo);
                 }
 
                 // Reset auth warning on successful requests
@@ -282,10 +334,101 @@ namespace Alify.Services
         
         #endregion
         
-        #region Timing Calculation Methods
+        #region Enhanced Timing Calculation Methods
         
         /// <summary>
-        /// Calculates the appropriate delay until the next poll based on various factors
+        /// Enhanced intelligent delay calculation with comprehensive edge case handling
+        /// </summary>
+        private int? CalculateIntelligentDelay(dynamic playbackInfo)
+        {
+            var remainingTimeMs = (int)(playbackInfo.RemainingTimeMs ?? 0);
+            // Use the same logic as above for isPlaying
+            bool isPlaying = remainingTimeMs > 0 && playbackInfo.CurrentlyPlaying != null;
+            
+            // Edge Case 1: Service starts near end of track (< ShortRemainingThresholdMs)
+            if (remainingTimeMs < _options.ShortRemainingThresholdMs)
+            {
+                _consecutiveShortRemainingCount++;
+                
+                // If we've hit short remaining time multiple times in a row, use frequent polling
+                if (_consecutiveShortRemainingCount >= _options.MaxConsecutiveShortRemainingAttempts)
+                {
+                    _logger.LogDebug("Consecutive short remaining time detected ({Count} times), using frequent polling", 
+                        (object)_consecutiveShortRemainingCount);
+                    return _options.ShortRemainingTrackPollingMs;
+                }
+                
+                // Otherwise, use a very short delay to catch the track transition quickly
+                var shortDelay = Math.Min(remainingTimeMs + _options.TrackTransitionBufferMs, _options.ShortRemainingTrackPollingMs);
+                _logger.LogDebug("Short remaining time ({RemainingMs}ms), using short delay: {DelayMs}ms", 
+                    (object)remainingTimeMs, (object)shortDelay);
+                return shortDelay;
+            }
+            else
+            {
+                // Reset short remaining counter when we have sufficient time
+                _consecutiveShortRemainingCount = 0;
+            }
+            
+            // Edge Case 2: Paused playback handling
+            if (!isPlaying)
+            {
+                _pausedPollingAttempts++;
+                
+                // Use progressive backoff for paused state to save resources
+                var pausedDelay = Math.Min(
+                    _options.PausedPlaybackPollingIntervalMs * Math.Min(_pausedPollingAttempts, _options.MaxPausedBackoffMultiplier),
+                    _options.MaximumPollingIntervalMs);
+                
+                _logger.LogDebug("Paused playback detected (attempt {Attempts}), using paused interval: {DelayMs}ms", 
+                    (object)_pausedPollingAttempts, (object)pausedDelay);
+                return (int)pausedDelay;
+            }
+            else
+            {
+                // Reset paused attempts when playing
+                _pausedPollingAttempts = 0;
+            }
+            
+            // Edge Case 3: Recent track change detection for missed transitions
+            var timeSinceLastTrackChange = DateTime.UtcNow - _lastTrackChangeDetection;
+            if (timeSinceLastTrackChange.TotalMilliseconds < _options.RecentTrackChangeWindowMs)
+            {
+                // Use more frequent polling after recent track changes to ensure we don't miss rapid changes
+                var recentChangeDelay = Math.Min(_options.RecentTrackChangePollingMs, remainingTimeMs / 2);
+                _logger.LogDebug("Recent track change detected ({TimeSinceMs}ms ago), using frequent polling: {DelayMs}ms", 
+                    (object)timeSinceLastTrackChange.TotalMilliseconds, (object)recentChangeDelay);
+                return recentChangeDelay;
+            }
+            
+            // Standard intelligent timing calculation
+            // Calculate adaptive buffer based on track length
+            int bufferMs = Math.Max(
+                (int)(remainingTimeMs * _options.TrackEndBufferPercentage),
+                _options.MinimumTrackEndBufferMs);
+            
+            // Ensure we have at least minimum polling interval
+            var nextCheckMs = Math.Max(
+                (int)(remainingTimeMs - bufferMs),
+                _options.MinimumPollingIntervalMs);
+            
+            // Cap the max delay
+            nextCheckMs = Math.Min(nextCheckMs, _options.MaximumPollingIntervalMs);
+            
+            // Additional safety check: if calculated delay would extend past successful poll window, reduce it
+            var maxAllowableDelay = (int)Math.Max(
+                _options.MaxTimeBetweenSuccessfulPollsMs - (DateTime.UtcNow - _lastSuccessfulPoll).TotalMilliseconds,
+                _options.MinimumPollingIntervalMs);
+            
+            nextCheckMs = Math.Min(nextCheckMs, maxAllowableDelay);
+            
+            _logger.LogDebug("Standard intelligent timing: remaining={RemainingMs}ms, buffer={BufferMs}ms, nextCheck={NextCheckMs}ms", 
+                (object)remainingTimeMs, (object)bufferMs, (object)nextCheckMs);
+            return nextCheckMs;
+        }
+        
+        /// <summary>
+        /// Calculates the appropriate delay until the next poll based on various factors with edge case enhancements
         /// </summary>
         private int CalculateNextDelay(int? suggestedDelay)
         {
@@ -299,6 +442,14 @@ namespace Alify.Services
             if (suggestedDelay.HasValue)
             {
                 return suggestedDelay.Value;
+            }
+            
+            // Enhanced state-based intervals with paused state handling
+            if (_wasPausedLastCheck)
+            {
+                // Progressive backoff for paused state
+                var pausedDelay = _options.PausedPlaybackPollingIntervalMs * Math.Min(_pausedPollingAttempts + 1, _options.MaxPausedBackoffMultiplier);
+                return Math.Min((int)pausedDelay, _options.MaximumPollingIntervalMs);
             }
             
             // Use different intervals based on playback state
@@ -323,7 +474,7 @@ namespace Alify.Services
     }
     
     /// <summary>
-    /// Configuration options for Spotify playback monitoring
+    /// Enhanced configuration options for Spotify playback monitoring with edge case handling
     /// </summary>
     public class PlaybackMonitorOptions
     {
@@ -387,5 +538,52 @@ namespace Alify.Services
         /// Minimum buffer time before track end (default: 2000ms)
         /// </summary>
         public int MinimumTrackEndBufferMs { get; set; } = 2000;
+        
+        // Edge Case Handling Options
+        
+        /// <summary>
+        /// Threshold for considering remaining time as "short" requiring special handling (default: 3000ms)
+        /// </summary>
+        public int ShortRemainingThresholdMs { get; set; } = 3000;
+        
+        /// <summary>
+        /// Polling interval when track has short remaining time (default: 2000ms)
+        /// </summary>
+        public int ShortRemainingTrackPollingMs { get; set; } = 2000;
+        
+        /// <summary>
+        /// Maximum consecutive short remaining attempts before switching to frequent polling (default: 3)
+        /// </summary>
+        public int MaxConsecutiveShortRemainingAttempts { get; set; } = 3;
+        
+        /// <summary>
+        /// Buffer time added when remaining time is very short to catch track transitions (default: 500ms)
+        /// </summary>
+        public int TrackTransitionBufferMs { get; set; } = 500;
+        
+        /// <summary>
+        /// Maximum multiplier for paused playback backoff (default: 4, so max = 15000 * 4 = 60000ms)
+        /// </summary>
+        public int MaxPausedBackoffMultiplier { get; set; } = 4;
+        
+        /// <summary>
+        /// Time window after track change to use more frequent polling (default: 10000ms)
+        /// </summary>
+        public int RecentTrackChangeWindowMs { get; set; } = 10000;
+        
+        /// <summary>
+        /// Polling interval after recent track changes to catch rapid transitions (default: 3000ms)
+        /// </summary>
+        public int RecentTrackChangePollingMs { get; set; } = 3000;
+        
+        /// <summary>
+        /// Maximum time allowed between successful polls before forcing more frequent checks (default: 30000ms)
+        /// </summary>
+        public int MaxTimeBetweenSuccessfulPollsMs { get; set; } = 30000;
+
+        /// <summary>
+        /// Minimum remaining time (ms) to consider a track change as a skip (default: 2000ms)
+        /// </summary>
+        public int SkipDetectionRemainingTimeThresholdMs { get; set; } = 2000;
     }
 }
