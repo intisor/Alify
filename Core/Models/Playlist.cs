@@ -40,7 +40,7 @@ namespace Alify.Core.Models
         public List<Track> Tracks { get; set; } = new();
         public int CurrentIndex { get; set; } = 0;
         public DateTime CachedAt { get; set; } = DateTime.UtcNow;
-        public Track CurrentTrack => CurrentIndex < Tracks.Count ? Tracks[CurrentIndex] : Tracks[^1];
+        public Track CurrentTrack => CurrentIndex < Tracks.Count ? Tracks[CurrentIndex] : Tracks[0];
         public bool IsEmpty => Tracks.Count == 0;
         public bool IsExpired => DateTime.UtcNow - CachedAt > TimeSpan.FromMinutes(10);
 

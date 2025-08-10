@@ -29,6 +29,11 @@ namespace Alify.Services
                 {
                     return await spotify.Player.GetCurrentlyPlaying(new PlayerCurrentlyPlayingRequest());
                 }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(ex, "Network error connecting to Spotify API. Check DNS and network connectivity.");
+                    return null;
+                }
                 catch (APIException ex)
                 {
                     _logger.LogError(ex, "Error getting currently playing");

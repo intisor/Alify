@@ -102,6 +102,11 @@ namespace Alify.Features.Spotify.Services
             try
             {
                 var queue = await GetQueueAsync(userId, spotify);
+                if (queue?.CurrentTrack == null)
+                {
+                    _logger.LogDebug("Queue is empty or no current track is playing for user {UserId}.", userId);
+                    return null;
+                }
                 if (queue == null || queue.IsEmpty) return null;
 
                 if (queue.CurrentTrack.IsFlagged || queue.CurrentTrack.FullTrack.Explicit) 
