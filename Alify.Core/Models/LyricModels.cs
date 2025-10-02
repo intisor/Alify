@@ -9,9 +9,9 @@ namespace Alify.Core.Models
     public class LyricLine
     {
         public int LineNumber { get; set; }
-        public string Text { get; set; }
-        public string Artist { get; set; }
-        public string Section { get; set; } // e.g., "Verse 1", "Chorus", "Bridge"
+        public string? Text { get; set; }
+        public string? Artist { get; set; }
+        public string? Section { get; set; } // e.g., "Verse 1", "Chorus", "Bridge"
         public bool IsAnnotation { get; set; }
     }
 

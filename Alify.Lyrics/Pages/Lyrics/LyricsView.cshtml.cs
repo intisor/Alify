@@ -18,9 +18,9 @@ namespace Alify.Pages
             _lyricService = lyricService;
         }
 
-        public LyricMapping LyricMapping { get; set; }
-        public string MainArtist { get; set; }
-        public string TrackName { get; set; }
+        public LyricMapping? LyricMapping { get; set; }
+        public string? MainArtist { get; set; }
+        public string? TrackName { get; set; }
 
         public async Task<IActionResult> OnGetAsync(string artist = "The Weeknd", string track = "Blinding Lights")
         {

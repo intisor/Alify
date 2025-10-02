@@ -6,43 +6,43 @@ namespace Alify.Core.Models
     [DebuggerDisplay("Genius: {Genius?.Token != null ? \"Configured\" : \"Not configured\"}, Gemini: {Gemini?.ApiKey != null ? \"Configured\" : \"Not configured\"}, OpenRouter: {OpenRouter?.ApiKey != null ? \"Configured\" : \"Not configured\"}, Mistral: {Mistral?.ApiKey != null ? \"Configured\" : \"Not configured\"}")]
     public class ApiKeys
     {
-        public GeniusOptions Genius { get; set; }
-        public GeminiOptions Gemini { get; set; }
-        public OpenRouterOptions OpenRouter { get; set; }
-        public MistralOptions Mistral { get; set; }
+        public GeniusOptions? Genius { get; set; }
+        public GeminiOptions? Gemini { get; set; }
+        public OpenRouterOptions? OpenRouter { get; set; }
+        public MistralOptions? Mistral { get; set; }
     }           
 
     [DebuggerDisplay("ClientId: {ClientId}, RedirectUri: {RedirectUri}")]
     public class SpotifyOptions
     {
-        public string ClientId { get; set; }
-        public string ClientSecret { get; set; }
-        public string RedirectUri { get; set; }
+        public string? ClientId { get; set; }
+        public string? ClientSecret { get; set; }
+        public string? RedirectUri { get; set; }
     }
 
     [DebuggerDisplay("Token: {Token != null ? \"Set\" : \"Not set\"}")]
     public class GeniusOptions
     {
         [JsonPropertyName("token")]
-        public string Token { get; set; }
+        public string? Token { get; set; }
     }
 
     [DebuggerDisplay("ApiKey: {ApiKey != null ? \"Set\" : \"Not set\"}")]
     public class GeminiOptions
     {
-        public string ApiKey { get; set; }
+        public string? ApiKey { get; set; }
     }
 
     [DebuggerDisplay("ApiKey: {ApiKey != null ? \"Set\" : \"Not set\"}")]
     public class OpenRouterOptions
     {
-        public string ApiKey { get; set; }
+        public string? ApiKey { get; set; }
     }
 
     [DebuggerDisplay("ApiKey: {ApiKey != null ? \"Set\" : \"Not set\"}")]
     public class MistralOptions
     {
-        public string ApiKey { get; set; }
+        public string? ApiKey { get; set; }
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ namespace Alify.Core.Models
         /// <summary>
         /// Additional context or reason for the moderation results
         /// </summary>
-        public string context { get; set; }
+        public string? context { get; set; }
 
         /// <summary>
         /// Timestamp when the moderation was performed

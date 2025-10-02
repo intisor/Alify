@@ -8,8 +8,8 @@ namespace Alify.Core.Models
     [DebuggerDisplay("Id: {Id}, Name: {Name}, TrackCount: {TrackCount}, ActualTracks: {Tracks.Count}")]
     public class Playlist
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
+        public string? Id { get; set; }
+        public string? Name { get; set; }
         public int TrackCount { get; set; }
         public List<Track> Tracks { get; set; } = new();
     }
@@ -20,8 +20,8 @@ namespace Alify.Core.Models
     [DebuggerDisplay("Track: {FullTrack?.Artists?.FirstOrDefault()?.Name} - {FullTrack?.Name}, IsFlagged: {IsFlagged}, HasLyrics: {!string.IsNullOrEmpty(Lyrics)}")]
     public class Track
     {
-        public FullTrack FullTrack { get; set; }
-        public string Lyrics { get; set; }
+        public FullTrack? FullTrack { get; set; }
+        public string? Lyrics { get; set; }
         public LyricMapping? MappedLyrics { get; set; }
         public bool IsFlagged { get; set; }
     }
@@ -32,7 +32,7 @@ namespace Alify.Core.Models
     [DebuggerDisplay("CurrentlyPlaying: {CurrentlyPlaying?.FullTrack?.Name}, QueueCount: {Queue.Count}, RemainingTime: {RemainingTimeMs}ms")]
     public class SpotifyPlaybackInfo
     {
-        public Track CurrentlyPlaying { get; set; }
+        public Track? CurrentlyPlaying { get; set; }
         public List<Track> Queue { get; set; } = new();
         public int? RemainingTimeMs { get; set; }
     }
