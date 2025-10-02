@@ -209,9 +209,10 @@ public sealed class SpotifyPlaybackMonitorService(
     /// </summary>
     private (bool TrackChanged, bool PlaybackStateChanged) ProcessPlaybackInfo(SpotifyPlaybackInfo? playbackInfo)
     {
+        bool wasPlaying = _trackingState.WasPlayingLastCheck;
+        
         if (playbackInfo?.CurrentlyPlaying is null)
         {
-            bool wasPlaying = _trackingState.WasPlayingLastCheck;
             _trackingState.UpdatePlaybackState(false, false);
             _edgeCaseState.ResetTrackState();
 
@@ -223,7 +224,11 @@ public sealed class SpotifyPlaybackMonitorService(
             return (false, wasPlaying);
         }
 
-        string currentTrackId = playbackInfo.CurrentlyPlaying.FullTrack.Id;
+        string? currentTrackId = playbackInfo.CurrentlyPlaying?.FullTrack?.Id;
+        if (string.IsNullOrEmpty(currentTrackId))
+        {
+            return (false, wasPlaying);
+        }
         bool trackChanged = currentTrackId != _trackingState.LastTrackId;
 
         // User skip detection with modern null-conditional operators
@@ -237,7 +242,7 @@ public sealed class SpotifyPlaybackMonitorService(
 
             _trackingState.UpdateTrackId(currentTrackId);
             _edgeCaseState.OnTrackChanged(playbackInfo.RemainingTimeMs ?? 0);
-            logger.LogDebug("Track changed detected: {TrackName}", playbackInfo.CurrentlyPlaying.FullTrack.Name);
+            logger.LogDebug("Track changed detected: {TrackName}", playbackInfo.CurrentlyPlaying?.FullTrack?.Name ?? "Unknown");
         }
         else if (playbackInfo.RemainingTimeMs is int remainingMs)
         {

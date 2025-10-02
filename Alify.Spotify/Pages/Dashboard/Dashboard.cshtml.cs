@@ -85,7 +85,7 @@ namespace Alify.Pages
                 Queue = await _queueService.GetQueueAsync(userId, spotify);
                 if (Queue != null)
                 {
-                    _logger.LogInformation("Queue for user {UserId}: {@QueueTracks}", userId, Queue.Tracks.Select(t => new { t.FullTrack.Name, t.FullTrack.Id }));
+                    _logger.LogInformation("Queue for user {UserId}: {@QueueTracks}", userId, Queue.Tracks.Select(t => new { Name = t.FullTrack?.Name ?? "Unknown", Id = t.FullTrack?.Id ?? "Unknown" }));
                     if (Queue.IsEmpty)
                     {
                         StatusMessage = "Your queue is empty.";
@@ -100,8 +100,8 @@ namespace Alify.Pages
                         {
                             CurrentlyPlaying = Queue.CurrentTrack,
                             Queue = [.. Queue.Tracks.Skip(Queue.CurrentIndex + 1)],
-                            RemainingTimeMs = (currentlyPlayingResponse?.ProgressMs is not null && Queue.CurrentTrack.FullTrack.DurationMs > 0)
-                                ? Queue.CurrentTrack.FullTrack.DurationMs - currentlyPlayingResponse.ProgressMs
+                            RemainingTimeMs = (currentlyPlayingResponse?.ProgressMs is not null && Queue.CurrentTrack?.FullTrack?.DurationMs > 0)
+                                ? (Queue.CurrentTrack.FullTrack.DurationMs - currentlyPlayingResponse.ProgressMs)
                                 : null
                         }; 
                     }
@@ -294,7 +294,7 @@ namespace Alify.Pages
 
                         if (existingQueue != null && currentTrackAsTrackObject != null)
                         {
-                            existingQueue = await _queueService.SyncWithCurrentPlaybackAsync(userId, existingQueue, currentTrackAsTrackObject, queueTracks);
+                            existingQueue = _queueService.SyncWithCurrentPlayback(userId, existingQueue, currentTrackAsTrackObject, queueTracks);
 
                             // Update the cache with synced queue
                             this.WithService<IMemoryCache>(cache =>
@@ -359,7 +359,11 @@ namespace Alify.Pages
                     if (queue == null || queue.IsEmpty)  return "Your queue is empty. Please add tracks to analyze lyrics.";
 
 
-                    var track = queue.CurrentTrack.FullTrack;
+                    var track = queue.CurrentTrack?.FullTrack;
+                    if (track == null)
+                    {
+                        return "No current track available.";
+                    }
                     var artistName = track.Artists.FirstOrDefault()?.Name ?? "Unknown";
                     var lyrics = await freeLyricsProvider.GetLyricsAsync(artistName, track.Name);
                     if (string.IsNullOrEmpty(lyrics))

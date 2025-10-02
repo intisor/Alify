@@ -51,8 +51,8 @@ namespace Alify.Features.Spotify.Services
         {
             await SendSseMessageAsync("trackSkipped", new
             {
-                trackName = track.FullTrack.Name,
-                artist = track.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown",
+                trackName = track.FullTrack?.Name ?? "Unknown",
+                artist = track.FullTrack?.Artists.FirstOrDefault()?.Name ?? "Unknown",
                 reason = "Explicit or inappropriate content"
             });
         }

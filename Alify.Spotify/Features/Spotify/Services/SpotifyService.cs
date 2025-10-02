@@ -318,6 +318,10 @@ public class SpotifyService
             var user = await CurrentUserAsync();
             userId = user?.Id;
         }
+        if (string.IsNullOrEmpty(userId))
+        {
+            return null;
+        }
         _cache.Set("SpotifyUserId", userId, TimeSpan.FromHours(1));
 
 
@@ -362,11 +366,15 @@ public class SpotifyService
             var user = await CurrentUserAsync();
             userId = user?.Id;
         }
+        if (string.IsNullOrEmpty(userId))
+        {
+            return null;
+        }
 
         var skippedTrack = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
         if (skippedTrack != null && skippedTrack.IsFlagged)
         {
-            Log.Logger.Information("SkipIfFlaggedAsync: Skipped flagged track: {TrackName} by {Artist}", skippedTrack.FullTrack.Name, skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown");
+            Log.Logger.Information("SkipIfFlaggedAsync: Skipped flagged track: {TrackName} by {Artist}", skippedTrack.FullTrack?.Name ?? "Unknown", skippedTrack.FullTrack?.Artists.FirstOrDefault()?.Name ?? "Unknown");
             await _spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
 
             return skippedTrack;
@@ -378,9 +386,13 @@ public class SpotifyService
         }
     }
 
-    public async Task<PrivateUser> CurrentUserAsync()
+    public async Task<PrivateUser?> CurrentUserAsync()
     {
-        SpotifyClient client = await GetSpotifyClientAsync();
+        SpotifyClient? client = await GetSpotifyClientAsync();
+        if (client == null)
+        {
+            return null;
+        }
         return await client.UserProfile.Current();
     }
     /// <summary>
