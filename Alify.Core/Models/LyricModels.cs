@@ -78,8 +78,16 @@ namespace Alify.Core.Models
             return [.. _lines.Where(l => l.Section == section).Select(l => l.LineNumber)];
         }
 
-        public List<string> GetArtists() => [.. _lines.Select(l => l.Artist).Where(a => !string.IsNullOrEmpty(a)).Distinct()];
+        public List<string> GetArtists() => [.. _lines
+            .Select(l => l.Artist)
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Select(a => a!)  // Cast to non-null string
+            .Distinct()];
 
-        public List<string> GetSections() => [.. _lines.Select(l => l.Section).Where(s => !string.IsNullOrEmpty(s)).Distinct()];
+        public List<string> GetSections() => [.. _lines
+            .Select(l => l.Section)
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Select(s => s!)  // Cast to non-null string
+            .Distinct()];
     }
 }

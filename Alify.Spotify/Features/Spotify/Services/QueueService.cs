@@ -32,10 +32,12 @@ namespace Alify.Features.Spotify.Services
 			var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify);
 			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify);
 
-			if (currentlyPlaying?.Item is not FullTrack currentTrack || queueResponse.Queue is null)
-			{
-				return null;
-			}
+			if (currentlyPlaying is null || queueResponse is null || 
+                currentlyPlaying.Item is not FullTrack currentTrack || 
+                queueResponse.Queue is null)
+            {
+                return null;
+            }
 
 			var queue = queueResponse.Queue;
 
