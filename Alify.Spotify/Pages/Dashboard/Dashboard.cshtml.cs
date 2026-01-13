@@ -6,11 +6,11 @@ using Microsoft.Extensions.Caching.Memory;
 using Alify.Core.Models;
 using Alify.Core.Infrastructure.Logging;
 using Alify.Core.Services;
-using Alify.Extensions;
 using Alify.Services;
 using Alify.Features.Spotify.Services;
 using System.Threading.Tasks;
 using System.Linq;
+using Alify.Core.Extensions;
 
 namespace Alify.Pages
 {
