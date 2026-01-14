@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Mscc.GenerativeAI" />
     <ProjectReference Include="..\Alify.Core\Alify.Core.csproj" />
     <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="Microsoft.Playwright" />

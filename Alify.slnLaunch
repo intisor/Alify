@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "alify",
+    "Projects": [
+      {
+        "Path": "Alify.Lyrics\\Alify.Lyrics.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Alify.Spotify\\Alify.Spotify.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

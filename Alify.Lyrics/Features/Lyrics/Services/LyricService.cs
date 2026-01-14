@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Web;
 using Alify.Core.Models;
 using Alify.Core.Infrastructure.Logging;
+using Mscc.GenerativeAI;
 
 namespace Alify.Services
 {
@@ -129,7 +130,8 @@ namespace Alify.Services
 
             var providers = new List<(string Provider, string Endpoint, string? ApiKey, string Model)>
             {
-                ("Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", _apiKeys.Gemini?.ApiKey, "gemini-1.5-flash"),
+                // Using SDK for Gemini with latest model (gemini-3-flash-preview as of Jan 2025)
+                ("Gemini", "", _apiKeys.Gemini?.ApiKey, "gemini-3-flash-preview"), 
                 ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "meta-llama/llama-3.1-8b-instruct"),
                 ("Mistral", "https://api.mistral.ai/v1/chat/moderations", _apiKeys.Mistral?.ApiKey, "mistral-moderation-latest")
             };
@@ -239,12 +241,28 @@ namespace Alify.Services
         /// <returns>A <see cref="LyricsModerationResult"/>, or null if the request fails.</returns>
         private async Task<LyricsModerationResult?> CallApiAsync(string provider, string endpoint, string apiKey, string model, string prompt, CancellationToken cancellationToken)
         {
-            object requestBody;
             if (provider == "Gemini")
             {
-                requestBody = new { contents = new[] { new { parts = new[] { new { text = prompt } }, role = "user" } } };
+                var googleAI = new GoogleAI(apiKey);
+                var genModel = googleAI.GenerativeModel(model: model);
+                
+                // Using SDK to generate content
+                var geminiResponse = await genModel.GenerateContent(prompt, cancellationToken: cancellationToken);
+                
+                var textResponse = geminiResponse.Text;
+                if (textResponse is null) return null;
+
+                var jsonStart = textResponse.IndexOf('{');
+                var jsonEnd = textResponse.LastIndexOf('}');
+
+                if (jsonStart == -1 || jsonEnd == -1) return null;
+
+                var cleanJson = textResponse.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                return JsonSerializer.Deserialize<LyricsModerationResult>(cleanJson);
             }
-            else if (provider == "Mistral")
+
+            object requestBody;
+            if (provider == "Mistral")
             {
                 requestBody = new {
                     model,
@@ -282,8 +300,7 @@ namespace Alify.Services
             }
 
             var responseString = await response.Content.ReadAsStringAsync();
-            if (provider == "Gemini")
-                return ParseGeminiResponse(responseString);
+            // Gemini handled above
             if (provider == "Mistral")
                 return ParseMistralResponse(responseString);
             return ParseOpenAIResponse(responseString);
@@ -374,34 +391,6 @@ namespace Alify.Services
         private static bool IsRetryable(HttpStatusCode statusCode) =>
             statusCode is HttpStatusCode.ServiceUnavailable or HttpStatusCode.TooManyRequests or >= HttpStatusCode.InternalServerError;
 
-        /// <summary>
-        /// Parses the JSON response from the Gemini API.
-        /// </summary>
-        /// <param name="responseString">The JSON response string.</param>
-        /// <returns>A <see cref="LyricsModerationResult"/>, or null if parsing fails.</returns>
-        private LyricsModerationResult? ParseGeminiResponse(string responseString)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(responseString);
-                var textResponse = doc.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts")[0].GetProperty("text").GetString();
-
-                if (textResponse is null) return null;
-
-                var jsonStart = textResponse.IndexOf('{');
-                var jsonEnd = textResponse.LastIndexOf('}');
-
-                if (jsonStart == -1 || jsonEnd == -1) return null;
-
-                var cleanJson = textResponse.Substring(jsonStart, jsonEnd - jsonStart + 1);
-                return JsonSerializer.Deserialize<LyricsModerationResult>(cleanJson);
-            }
-            catch (Exception ex)
-            {
-                // HIGH-PERFORMANCE LOGGING: Exception + provider parameter, zero allocation
-                _logger.LogModerationParseError(ex, "Gemini");
-                return null;
-            }
-        }
+        // ParseGeminiResponse removed
     }
 }

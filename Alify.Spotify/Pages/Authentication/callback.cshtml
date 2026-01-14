@@ -1,0 +1,59 @@
+@page
+@model Alify.Spotify.Pages.Authentication.CallbackModel
+@{
+    ViewData["Title"] = "Spotify Authentication";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body text-center p-5">
+                    @if (Model.IsAuthenticated)
+                    {
+                        <div class="mb-4">
+                            <svg class="mx-auto mb-3" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" stroke="#1DB954" stroke-width="2" fill="none"/>
+                                <path d="M9 11l3 3L20 4" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-success mb-3">? Successfully Connected!</h2>
+                        <p class="text-muted mb-4">You've successfully authenticated with Spotify.</p>
+                        <a asp-page="/Dashboard/Dashboard" class="btn btn-success btn-lg">
+                            <svg width="20" height="20" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                            </svg>
+                            Go to Dashboard
+                        </a>
+                    }
+                    else if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                    {
+                        <div class="mb-4">
+                            <svg class="mx-auto mb-3" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" stroke="#dc3545" stroke-width="2" fill="none"/>
+                                <path d="M8 8l8 8M16 8l-8 8" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <h2 class="text-danger mb-3">? Authentication Failed</h2>
+                        <p class="text-muted mb-4">@Model.ErrorMessage</p>
+                        <a asp-page="/Index" class="btn btn-primary btn-lg">
+                            Try Again
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="mb-4">
+                            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <h2 class="mb-3">Authenticating...</h2>
+                        <p class="text-muted">Please wait while we connect to Spotify.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+                        

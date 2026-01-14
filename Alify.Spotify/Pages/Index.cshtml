@@ -1,10 +1,105 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Alify - Spotify Music Monitor";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container">
+    <div class="row justify-content-center align-items-center" style="min-height: 70vh;">
+        <div class="col-lg-8 text-center">
+            
+            <!-- Hero Section -->
+            <div class="mb-5">
+                <h1 class="display-3 fw-bold mb-3">
+                    <span class="text-success">🎵 Alify</span>
+                </h1>
+                <p class="lead text-muted mb-4">
+                    Monitor your Spotify playback in real-time with content filtering and lyrics
+                </p>
+            </div>
+
+            <!-- Features -->
+            <div class="row g-4 mb-5">
+                <div class="col-md-4">
+                    <div class="p-4">
+                        <div class="fs-1 mb-3">🎧</div>
+                        <h5 class="fw-bold">Real-time Monitoring</h5>
+                        <p class="text-muted small">Track your currently playing songs and queue</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-4">
+                        <div class="fs-1 mb-3">🛡️</div>
+                        <h5 class="fw-bold">Content Filtering</h5>
+                        <p class="text-muted small">Automatically skip inappropriate content</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-4">
+                        <div class="fs-1 mb-3">📝</div>
+                        <h5 class="fw-bold">Lyrics Display</h5>
+                        <p class="text-muted small">View lyrics for your current track</p>
+                    </div>
+                </div>
+            </div>
+
+            @if (Model.IsAuthenticated)
+            {
+                <!-- Already Authenticated -->
+                <div class="card shadow-sm border-success mb-4" style="max-width: 500px; margin: 0 auto;">
+                    <div class="card-body p-4">
+                        <div class="mb-3">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="mx-auto d-block mb-3">
+                                <circle cx="12" cy="12" r="10" stroke="#1DB954" stroke-width="2"/>
+                                <path d="M9 11l3 3L20 4" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <h4 class="text-success mb-2">✅ You're Connected!</h4>
+                            <p class="text-muted mb-0">Your Spotify account is linked</p>
+                        </div>
+                        <a asp-page="/Dashboard/Dashboard" class="btn btn-success btn-lg w-100 mb-2">
+                            Go to Dashboard
+                        </a>
+                        <form method="post" asp-page-handler="Logout" class="d-inline w-100">
+                            <button type="submit" class="btn btn-outline-secondary w-100">Disconnect</button>
+                        </form>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Login Card -->
+                <div class="card shadow-lg border-0" style="max-width: 500px; margin: 0 auto;">
+                    <div class="card-body p-5">
+                        <h3 class="card-title fw-bold mb-4">Get Started</h3>
+                        <p class="text-muted mb-4">Connect your Spotify account to begin monitoring your music</p>
+                        
+                        <form method="post" asp-page-handler="Login">
+                            <button type="submit" class="btn btn-success btn-lg w-100 d-flex align-items-center justify-content-center gap-2">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                </svg>
+                                <span>Continue with Spotify</span>
+                            </button>
+                        </form>
+
+                        <p class="text-muted small mt-4 mb-0">
+                            We'll never post anything without your permission
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="mt-4">
+                    <p class="text-muted small">
+                        <svg width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                            <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                        </svg>
+                        Requires a Spotify Premium account to control playback
+                    </p>
+                </div>
+            }
+
+        </div>
+    </div>
 </div>

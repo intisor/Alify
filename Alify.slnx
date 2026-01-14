@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Alify.Core/Alify.Core.csproj" />
+  <Project Path="Alify.Lyrics/Alify.Lyrics.csproj" />
+  <Project Path="Alify.Spotify/Alify.Spotify.csproj" />
+</Solution>
