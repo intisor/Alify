@@ -83,7 +83,7 @@ builder.Services.AddSingleton<SseService>();
 builder.Services.AddSingleton<ISseService>(sp => sp.GetRequiredService<SseService>());
 builder.Services.AddSingleton<ISpotifySubject>(sp => sp.GetRequiredService<SseService>());
 builder.Services.AddSingleton<SpotifyRequestCache>();
-builder.Services.AddSingleton<SpotifyService>();
+builder.Services.AddScoped<SpotifyService>(); // Changed from Singleton to Scoped for HttpContext access
 
 // Register the unified Spotify playback monitoring service
 builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
