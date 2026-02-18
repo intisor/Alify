@@ -101,7 +101,9 @@ public class SpotifyService
                 Scopes.UserReadPlaybackState,       // Allows reading the playback state (volume, repeat, etc.)
                 Scopes.UserModifyPlaybackState,     // Allows controlling playback (play, pause, skip, etc.)
                 Scopes.PlaylistModifyPrivate,       // Allows modifying private playlists
-                Scopes.PlaylistModifyPublic         // Allows modifying public playlists
+                Scopes.PlaylistModifyPublic,        // Allows modifying public playlists
+                Scopes.UserReadPlaybackPosition,    // Allows reading episode resume points
+                Scopes.UserLibraryRead              // Allows reading saved shows and episodes
             },
             State = state
         };
@@ -271,19 +273,15 @@ public class SpotifyService
     /// </remarks>
     private async Task<Track> CreateTrackFromFullTrackAsync(FullTrack fullTrack)
     {
-        // A track's URI or ID is a perfect unique key for caching.
         var cacheKey = $"Track_{fullTrack.Id}";
 
-        // 1. Try to get the fully processed track from the cache first.
         if (_cache.TryGetValue(cacheKey, out Track? cachedTrack))
         {
             return cachedTrack!;
         }
 
-        // 2. If not in cache, perform the expensive processing.
         var artistName = fullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
         var lyrics = await _freeLyricsProvider.GetLyricsAsync(artistName, fullTrack.Name);
-        // Note: Moderation should be handled by a separate AI service if needed
         var isFlagged = fullTrack.Explicit;
 
         var newTrack = new Track
@@ -293,11 +291,38 @@ public class SpotifyService
             IsFlagged = isFlagged
         };
 
-        // 3. Store the newly created Track object in the cache for future requests.
-        // We'll cache it for an hour; adjust as needed.
         _cache.Set(cacheKey, newTrack, TimeSpan.FromHours(1));
 
         return newTrack;
+    }
+
+    /// <summary>
+    /// Creates a custom Track object from a Spotify FullEpisode, enriching it with episode-specific metadata.
+    /// </summary>
+    /// <param name="fullEpisode">The FullEpisode object from the Spotify API.</param>
+    /// <returns>A custom Track object representing the episode.</returns>
+    private Task<Track> CreateTrackFromFullEpisodeAsync(FullEpisode fullEpisode)
+    {
+        var cacheKey = $"Episode_{fullEpisode.Id}";
+
+        if (_cache.TryGetValue(cacheKey, out Track? cachedTrack))
+        {
+            return Task.FromResult(cachedTrack!);
+        }
+
+        var newTrack = new Track
+        {
+            FullEpisode = fullEpisode,
+            ResumePositionMs = fullEpisode.ResumePoint?.ResumePositionMs,
+            FullyPlayed = fullEpisode.ResumePoint?.FullyPlayed,
+            // Episodes don't have lyrics, and "explicit" has a different meaning for podcasts
+            Lyrics = null,
+            IsFlagged = false
+        };
+
+        _cache.Set(cacheKey, newTrack, TimeSpan.FromHours(1));
+
+        return Task.FromResult(newTrack);
     }
 
     /// <summary>
@@ -326,7 +351,28 @@ public class SpotifyService
 
 
         var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
-        if (currentlyPlayingResponse?.Item is not FullTrack currentTrack) return null;
+        if (currentlyPlayingResponse?.Item == null) return null;
+
+        // Handle both tracks and episodes
+        Track currentItem;
+        int durationMs;
+        string currentItemId;
+
+        switch (currentlyPlayingResponse.Item)
+        {
+            case FullTrack currentTrack:
+                currentItem = await CreateTrackFromFullTrackAsync(currentTrack);
+                durationMs = currentTrack.DurationMs;
+                currentItemId = currentTrack.Id;
+                break;
+            case FullEpisode currentEpisode:
+                currentItem = await CreateTrackFromFullEpisodeAsync(currentEpisode);
+                durationMs = currentEpisode.DurationMs;
+                currentItemId = currentEpisode.Id;
+                break;
+            default:
+                return null;
+        }
 
         var isQueueValid = await _queueService.ValidateQueueAsync(userId, spotify);
         if (!isQueueValid)
@@ -339,8 +385,8 @@ public class SpotifyService
         if (queue == null || queue.IsEmpty) return null;
         var playbackInfo = new SpotifyPlaybackInfo
         {
-            CurrentlyPlaying = queue.CurrentTrack ?? await CreateTrackFromFullTrackAsync(currentTrack),
-            RemainingTimeMs = currentTrack.DurationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
+            CurrentlyPlaying = queue.CurrentTrack ?? currentItem,
+            RemainingTimeMs = durationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
             Queue = [.. queue.Tracks.Skip(1)], 
         };
         await _spotifySubject.NotifyPlaybackInfoAsync(playbackInfo);
@@ -383,6 +429,59 @@ public class SpotifyService
         {
             Log.Logger.Information("SkipIfFlaggedAsync: No flagged track to skip.");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Adds an item (track or episode) to the user's Spotify playback queue.
+    /// </summary>
+    /// <param name="spotify">The SpotifyClient instance.</param>
+    /// <param name="uri">The Spotify URI of the item to add (e.g., spotify:track:xxx or spotify:episode:xxx).</param>
+    public async Task<bool> AddToQueueAsync(SpotifyClient spotify, string uri)
+    {
+        try
+        {
+            await spotify.Player.AddToQueue(new PlayerAddToQueueRequest(uri));
+            _logger.LogInformation("Added item to queue: {Uri}", uri);
+
+            // Invalidate the cached queue so it rebuilds with the new item
+            _cache.TryGetValue("SpotifyUserId", out string? userId);
+            if (!string.IsNullOrEmpty(userId))
+            {
+                _queueService.InvalidateQueue(userId);
+            }
+            return true;
+        }
+        catch (APIException ex)
+        {
+            _logger.LogError(ex, "Error adding item to queue: {Uri}", uri);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Sets the repeat mode for the Spotify player.
+    /// </summary>
+    /// <param name="spotify">The SpotifyClient instance.</param>
+    /// <param name="state">The repeat state: "track", "context", or "off".</param>
+    public async Task<bool> SetRepeatModeAsync(SpotifyClient spotify, string state)
+    {
+        try
+        {
+            var repeatState = state.ToLowerInvariant() switch
+            {
+                "track" => PlayerSetRepeatRequest.State.Track,
+                "context" => PlayerSetRepeatRequest.State.Context,
+                _ => PlayerSetRepeatRequest.State.Off
+            };
+            await spotify.Player.SetRepeat(new PlayerSetRepeatRequest(repeatState));
+            _logger.LogInformation("Repeat mode set to: {State}", state);
+            return true;
+        }
+        catch (APIException ex)
+        {
+            _logger.LogError(ex, "Error setting repeat mode to: {State}", state);
+            return false;
         }
     }
 

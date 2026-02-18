@@ -32,29 +32,44 @@ namespace Alify.Features.Spotify.Services
 			var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify);
 			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify);
 
-			if (currentlyPlaying is null || queueResponse is null || 
-                currentlyPlaying.Item is not FullTrack currentTrack || 
-                queueResponse.Queue is null)
-            {
-                return null;
-            }
+			if (currentlyPlaying is null || queueResponse is null || queueResponse.Queue is null)
+				return null;
+
+			// Handle both tracks and episodes as the currently playing item
+			Track? currentItem = currentlyPlaying.Item switch
+			{
+				FullTrack track => await BuildTrackAsync(track),
+				FullEpisode episode => BuildEpisode(episode),
+				_ => null
+			};
+
+			if (currentItem == null) return null;
 
 			var queue = queueResponse.Queue;
 
             var newQueue = new MusicQueue();
 
-			newQueue.Tracks.Add(await BuildTrackAsync(currentTrack));
+			newQueue.Tracks.Add(currentItem);
 
+			// Process queue items — can be a mix of tracks and episodes
 			foreach (var item in queue.Take(9))
 			{
-				if (item is FullTrack track)
+				switch (item)
 				{
-					newQueue.EnqueueTrack(await BuildTrackAsync(track));
+					case FullTrack track:
+						newQueue.EnqueueTrack(await BuildTrackAsync(track));
+						break;
+					case FullEpisode episode:
+						newQueue.EnqueueTrack(BuildEpisode(episode));
+						break;
 				}
 			}
 			_cache.Set(cacheKey, newQueue, TimeSpan.FromMinutes(11));
 			newQueue.CachedAt = DateTime.UtcNow;
-			_logger.LogInformation("Queue for user {UserId} built with {TrackCount} tracks.", userId, newQueue.Tracks.Count);
+			_logger.LogInformation("Queue for user {UserId} built with {ItemCount} items ({TrackCount} tracks, {EpisodeCount} episodes).", 
+				userId, newQueue.Tracks.Count, 
+				newQueue.Tracks.Count(t => !t.IsEpisode), 
+				newQueue.Tracks.Count(t => t.IsEpisode));
 			return newQueue;
 		}
 		private async Task<Track> BuildTrackAsync(FullTrack track)
@@ -73,6 +88,21 @@ namespace Alify.Features.Spotify.Services
 
 			return queueTrack;
 		}
+
+		/// <summary>
+		/// Builds a Track object from a FullEpisode. Episodes don't have lyrics so this is synchronous.
+		/// </summary>
+		private static Track BuildEpisode(FullEpisode episode)
+		{
+			return new Track
+			{
+				FullEpisode = episode,
+				ResumePositionMs = episode.ResumePoint?.ResumePositionMs,
+				FullyPlayed = episode.ResumePoint?.FullyPlayed,
+				Lyrics = null,
+				IsFlagged = false
+			};
+		}
 		public async Task<bool> ValidateQueueAsync(string userId, SpotifyClient spotify)
 		{
 			var queue = await GetQueueAsync(userId, spotify);
@@ -82,9 +112,18 @@ namespace Alify.Features.Spotify.Services
 				return false;
 			}
 			var currentPlaybackResponse = await spotify.Player.GetCurrentPlayback();
-			if (currentPlaybackResponse?.Item is not FullTrack currentTrack) return false;
 
-			var isValid = queue.MatchesCurrentPlayback(currentTrack.Id);
+			// Handle both tracks and episodes for validation
+			string? currentItemId = currentPlaybackResponse?.Item switch
+			{
+				FullTrack track => track.Id,
+				FullEpisode episode => episode.Id,
+				_ => null
+			};
+
+			if (currentItemId == null) return false;
+
+			var isValid = queue.MatchesCurrentPlayback(currentItemId);
 			if (!isValid)
 			{
 				_logger.LogInformation("Queue out of sync - invalidating cache");
@@ -98,10 +137,10 @@ namespace Alify.Features.Spotify.Services
 			var cacheKey = $"queue_{userId}";
 			_cache.Remove(cacheKey);
 		}
-		public async Task<Track?> GetTrackFromQueueAsync(string userId, string trackId, SpotifyClient spotify)
+		public async Task<Track?> GetTrackFromQueueAsync(string userId, string itemId, SpotifyClient spotify)
 		{
 			var queue = await GetQueueAsync(userId, spotify);
-			return queue?.Tracks.FirstOrDefault(t => t.FullTrack?.Id == trackId);
+			return queue?.Tracks.FirstOrDefault(t => t.ItemId == itemId);
 		}
         public async Task<Track?> SkipFlaggedSongsAsync(string userId, SpotifyClient spotify)
         {
@@ -113,6 +152,12 @@ namespace Alify.Features.Spotify.Services
                 {
                     _logger.LogDebug("Queue is empty or no current track is playing for user {UserId}.", userId);
                     return null;
+                }
+
+                // Skip content filtering for episodes — they don't have the same explicit flag semantics
+                if (queue.CurrentTrack.IsEpisode)
+                {
+                    return queue.CurrentTrack;
                 }
 
                 if (queue.CurrentTrack.IsFlagged || queue.CurrentTrack.FullTrack?.Explicit == true)
@@ -135,13 +180,13 @@ namespace Alify.Features.Spotify.Services
 		{
             if (existingQueue == null)
             {
-                // Create a new queue if none exists
                 existingQueue = new MusicQueue { Tracks = [currentTrack], CurrentIndex = 0, CachedAt = DateTime.UtcNow };
                 existingQueue.Tracks.AddRange(queueTracks);
                 return existingQueue;
             }
 
-            if (existingQueue.CurrentTrack?.FullTrack?.Id == currentTrack.FullTrack?.Id)
+            // Use unified ItemId for comparison (works for both tracks and episodes)
+            if (existingQueue.CurrentTrack?.ItemId == currentTrack.ItemId)
             {
         
                 var updatedTracks = new List<Track> { currentTrack };
@@ -154,7 +199,7 @@ namespace Alify.Features.Spotify.Services
             // adjusting queue
             for (int i = 0; i < existingQueue.Tracks.Count; i++)
             {
-                if (existingQueue.Tracks[i].FullTrack?.Id == currentTrack.FullTrack?.Id)
+                if (existingQueue.Tracks[i].ItemId == currentTrack.ItemId)
                 {
                     // Found the current track in the existing queue
                     existingQueue.CurrentIndex = i;

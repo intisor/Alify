@@ -224,7 +224,7 @@ public sealed class SpotifyPlaybackMonitorService(
             return (false, wasPlaying);
         }
 
-        string? currentTrackId = playbackInfo.CurrentlyPlaying?.FullTrack?.Id;
+        string? currentTrackId = playbackInfo.CurrentlyPlaying?.ItemId;
         if (string.IsNullOrEmpty(currentTrackId))
         {
             return (false, wasPlaying);
@@ -242,7 +242,9 @@ public sealed class SpotifyPlaybackMonitorService(
 
             _trackingState.UpdateTrackId(currentTrackId);
             _edgeCaseState.OnTrackChanged(playbackInfo.RemainingTimeMs ?? 0);
-            logger.LogDebug("Track changed detected: {TrackName}", playbackInfo.CurrentlyPlaying?.FullTrack?.Name ?? "Unknown");
+            logger.LogDebug("Item changed detected: {ItemName} ({ItemType})", 
+                playbackInfo.CurrentlyPlaying?.DisplayName ?? "Unknown",
+                playbackInfo.CurrentlyPlaying?.IsEpisode == true ? "Episode" : "Track");
         }
         else if (playbackInfo.RemainingTimeMs is int remainingMs)
         {
@@ -293,9 +295,9 @@ public sealed class SpotifyPlaybackMonitorService(
             _edgeCaseState.OnTrackSkipped();
 
             await spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
-            logger.LogInformation("Track skipped and observers notified: {TrackName} by {Artist}",
-                (object)skippedTrack.FullTrack.Name,
-                (object)(skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown"));
+            logger.LogInformation("Track skipped and observers notified: {ItemName} by {Artist}",
+                (object)skippedTrack.DisplayName,
+                (object)skippedTrack.DisplayArtist);
 
             return _options.PostSkipCheckDelayMs;
         }

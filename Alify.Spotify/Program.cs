@@ -1,4 +1,4 @@
-using Alify.Controllers;
+﻿using Alify.Controllers;
 using Alify.Core.Infrastructure.Doppler;
 using Alify.Core.Models;
 using Alify.Core.Services;
@@ -88,6 +88,9 @@ builder.Services.AddScoped<SpotifyService>(); // Changed from Singleton to Scope
 // Register the unified Spotify playback monitoring service
 builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
 builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetRequiredService<SpotifyPlaybackMonitorService>());
+
+// Register the sleep timer service (addresses Spotify Community complaint about broken sleep timers)
+builder.Services.AddSingleton<SleepTimerService>();
 builder.Services.Configure<PlaybackMonitorOptions>(options => {
     options.PostSkipCheckDelayMs = 800;
     options.ActivePlaybackPollingIntervalMs = 4000;
