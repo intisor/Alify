@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Mscc.GenerativeAI" />
     <ProjectReference Include="..\Alify.Core\Alify.Core.csproj" />
+    <ProjectReference Include="..\Alify.ServiceDefaults\Alify.ServiceDefaults.csproj" />
     <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="Serilog.AspNetCore" />

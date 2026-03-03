@@ -11,6 +11,7 @@
     <PackageReference Include="SpotifyAPI.Web" />
     <PackageReference Include="SpotifyAPI.Web.Auth" />
     <ProjectReference Include="..\Alify.Core\Alify.Core.csproj" />
+    <ProjectReference Include="..\Alify.ServiceDefaults\Alify.ServiceDefaults.csproj" />
     <PackageReference Include="TickerQ" />
     <PackageReference Include="TickerQ.Dashboard" />
     <PackageReference Include="Serilog.AspNetCore" />

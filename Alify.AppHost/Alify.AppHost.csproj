@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>50d88769-93c7-4536-bfae-5d0190db375a</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Alify.Spotify\Alify.Spotify.csproj" />
+    <ProjectReference Include="..\Alify.Lyrics\Alify.Lyrics.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,14 +8,18 @@ using System.Security.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Add Aspire service defaults (OpenTelemetry, health checks, resilience)
+builder.AddServiceDefaults();
+
+// Configure Serilog as an additional provider so OpenTelemetry (Aspire dashboard) is preserved.
+// UseSerilog() replaces the entire ILoggerFactory (wiping OTel); AddSerilog() adds it alongside.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .CreateLogger();
 
-builder.Host.UseSerilog();
+builder.Logging.AddSerilog(Log.Logger, dispose: true);
 
 var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 builder.Configuration.AddDoppler(dopplerToken);
@@ -73,9 +77,6 @@ builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>
     };
 });
 
-// Keep existing LyricService registration for Genius scraping
-builder.Services.AddHttpClient<LyricService>();
-
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -100,5 +101,8 @@ app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
+
+// Map Aspire health check endpoints
+app.MapDefaultEndpoints();
 
 app.Run();
