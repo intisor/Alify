@@ -1,10 +1,15 @@
+using Alify.Core.Infrastructure.FeatureFlags;
 using Alify.Features.Spotify.Services;
 using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.FeatureManagement.Mvc;
 
 namespace Alify.Pages
 {
+    // Spotify real-time events are part of the enhanced Release B feature set.
+    // Gated here so the SSE endpoint is only active when EnableSpotifyIntegration is on.
+    [FeatureGate(FeatureFlags.EnableSpotifyIntegration)]
     public class SpotifyEventsModel : PageModel
     {
         private readonly SseService _sseService;

@@ -6,6 +6,7 @@ using Alify.Features.Spotify.Events;
 using Alify.Features.Spotify.Services;
 using Alify.Services;
 using Microsoft.Extensions.Options;
+using Microsoft.FeatureManagement;
 using Serilog;
 using SpotifyAPI.Web;
 using System.Security.Authentication;
@@ -38,6 +39,16 @@ builder.Services.AddRazorPages(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddOutputCache();
+
+// Feature flags — reads from IConfiguration["FeatureManagement:{FlagName}"].
+// featureflags.json: all new Release B flags default to false (safe deploy).
+// featureflags.Development.json: all flags true (develop everything locally).
+// Separate from appsettings.json so flags are version-controlled without exposing secrets.
+builder.Configuration
+    .AddJsonFile("featureflags.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"featureflags.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
+
+builder.Services.AddFeatureManagement();
 
 builder.Services.AddHttpLogging(options =>
 {

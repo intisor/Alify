@@ -27,5 +27,6 @@
     <PackageVersion Include="SpotifyAPI.Web.Auth" Version="7.1.1" />
     <PackageVersion Include="TickerQ" Version="2.3.0" />
     <PackageVersion Include="TickerQ.Dashboard" Version="2.3.0" />
+    <PackageVersion Include="Microsoft.FeatureManagement.AspNetCore" Version="4.4.0" />
   </ItemGroup>
 </Project>

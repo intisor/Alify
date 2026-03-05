@@ -1,0 +1,10 @@
+{
+  "FeatureManagement": {
+    "EnableSpotifyModeration": true,
+    "EnableMultipleLyricsSources": true,
+    "EnableSmartSkip": true,
+    "EnableSpotifyIntegration": true,
+    "EnableBasicLyrics": true,
+    "EnableCaching": true
+  }
+}

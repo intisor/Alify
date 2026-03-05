@@ -15,6 +15,7 @@
     <PackageReference Include="TickerQ" />
     <PackageReference Include="TickerQ.Dashboard" />
     <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Microsoft.FeatureManagement.AspNetCore" />
   </ItemGroup>
 
 </Project>

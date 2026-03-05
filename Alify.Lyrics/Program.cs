@@ -3,6 +3,7 @@ using Alify.Core.Models;
 using Alify.Core.Services;
 using Alify.Services;
 using Microsoft.Extensions.Options;
+using Microsoft.FeatureManagement;
 using Serilog;
 using System.Security.Authentication;
 
@@ -33,6 +34,11 @@ builder.Services.AddRazorPages(options =>
 builder.Services.AddControllers();
 builder.Services.AddOutputCache();
 
+// Feature flags — reads from IConfiguration["FeatureManagement:{FlagName}"].
+// appsettings.json: all new Release A/B flags default to false (safe deploy).
+// appsettings.Development.json: all flags true (develop everything locally).
+builder.Services.AddFeatureManagement();
+
 builder.Services.AddHttpLogging(options =>
 {
     options.LoggingFields = Microsoft.AspNetCore.HttpLogging.HttpLoggingFields.RequestMethod |
@@ -60,10 +66,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ArtistLyricService>();
 
 // Configure a dedicated HttpClient for LyricService with modern SSL protocols
+// LyricService now handles BOTH lyrics fetching AND search (Issue #2) - no duplication!
 builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>
 {
     var apiKeys = serviceProvider.GetRequiredService<IOptions<ApiKeys>>().Value;
-    // You can set base addresses or default headers here if needed
 })
 .ConfigurePrimaryHttpMessageHandler(() =>
 {

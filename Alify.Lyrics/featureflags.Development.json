@@ -1,0 +1,10 @@
+{
+  "FeatureManagement": {
+    "EnableGeniusSearch": true,
+    "EnableLyricsChat": true,
+    "EnableVideoExport": true,
+    "EnableSpotifyIntegration": true,
+    "EnableBasicLyrics": true,
+    "EnableCaching": true
+  }
+}

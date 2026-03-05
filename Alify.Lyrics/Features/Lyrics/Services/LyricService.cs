@@ -98,6 +98,91 @@ namespace Alify.Services
         }
 
         /// <summary>
+        /// Search for songs on Genius without immediately scraping lyrics (Issue #2).
+        /// Reuses the existing Genius API integration but returns multiple results instead of just the first.
+        /// </summary>
+        /// <param name="query">Song title or search query.</param>
+        /// <param name="artist">Optional artist name to narrow results.</param>
+        /// <param name="perPage">Number of results (max 50).</param>
+        /// <returns>Array of search results with metadata, or empty array if no matches.</returns>
+        public async Task<SearchResult[]> SearchAsync(string query, string? artist = null, int perPage = 10)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                _logger.LogWarning("Search query is empty");
+                return Array.Empty<SearchResult>();
+            }
+
+            perPage = Math.Clamp(perPage, 1, 50);
+            var cacheKey = $"search_{query}_{artist}_{perPage}".ToLowerInvariant();
+            
+            if (_cache.TryGetValue(cacheKey, out SearchResult[]? cached))
+                return cached!;
+
+            var geniusKey = _apiKeys.Genius?.Token;
+            if (string.IsNullOrEmpty(geniusKey))
+            {
+                _logger.LogGeniusTokenMissing();
+                return Array.Empty<SearchResult>();
+            }
+
+            // Reuse the existing search logic (line 64 pattern)
+            var searchQuery = string.IsNullOrWhiteSpace(artist) ? query : $"{query} {artist}";
+            var searchUrl = $"https://api.genius.com/search?q={HttpUtility.UrlEncode(searchQuery)}&per_page={perPage}";
+            
+            using var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", geniusKey);
+
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogGeniusSearchFailed(response.StatusCode, searchQuery, string.Empty);
+                    return Array.Empty<SearchResult>();
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                
+                // Parse ALL hits instead of just FirstOrDefault (the key difference!)
+                var results = doc.RootElement
+                    .GetProperty("response")
+                    .GetProperty("hits")
+                    .EnumerateArray()
+                    .Select(hit =>
+                    {
+                        var result = hit.GetProperty("result");
+                        return new SearchResult
+                        {
+                            GeniusId = result.GetProperty("id").GetInt32(),
+                            Title = result.GetProperty("title").GetString() ?? "Unknown",
+                            Artist = result.GetProperty("primary_artist").GetProperty("name").GetString() ?? "Unknown",
+                            GeniusUrl = result.GetProperty("url").GetString() ?? "",
+                            FullTitle = result.TryGetProperty("full_title", out var ft) ? ft.GetString() : null,
+                            ThumbnailUrl = result.TryGetProperty("song_art_image_thumbnail_url", out var thumb) ? thumb.GetString() : null,
+                            Album = result.TryGetProperty("album", out var album) && album.ValueKind != JsonValueKind.Null
+                                ? album.GetProperty("name").GetString()
+                                : null,
+                            ReleaseDateDisplay = result.TryGetProperty("release_date_for_display", out var date) ? date.GetString() : null
+                        };
+                    })
+                    .ToArray();
+
+                // Cache for 15 minutes (Issue #2 spec)
+                _cache.Set(cacheKey, results, TimeSpan.FromMinutes(15));
+                _logger.LogInformation("Found {Count} search results for: {Query}", results.Length, query);
+                
+                return results;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching Genius for: {Query}", query);
+                return Array.Empty<SearchResult>();
+            }
+        }
+
+        /// <summary>
         /// Moderates lyrics for explicit content using the Gemini API.
         /// </summary>
         /// <param name="lyrics">The lyrics to moderate.</param>

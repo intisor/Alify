@@ -1,12 +1,18 @@
+using Alify.Core.Infrastructure.FeatureFlags;
 using Alify.Core.Models;
 using Alify.Core.Services;
 using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.FeatureManagement.Mvc;
 using System.Threading.Tasks;
 
 namespace Alify.Pages
 {
+    // [FeatureGate] is from Microsoft.FeatureManagement.AspNetCore.
+    // When EnableLyricsChat = false in config, ASP.NET Core returns 404 automatically —
+    // no manual if-statements needed. The page simply doesn't exist to the outside world.
+    [FeatureGate(FeatureFlags.EnableLyricsChat)]
     public class LyricsViewModel : PageModel
     {
         private readonly ArtistLyricService _artistLyricService;

@@ -1,89 +1,97 @@
 using Microsoft.Playwright;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
-namespace Alify.Services
+namespace Alify.Services;
+
+public class PlaywrightLyricsScraper
 {
-    public class PlaywrightLyricsScraper
+    private readonly ILogger<PlaywrightLyricsScraper> _logger;
+
+    public PlaywrightLyricsScraper(ILogger<PlaywrightLyricsScraper> logger)
     {
-        private readonly ILogger<PlaywrightLyricsScraper> _logger;
+        _logger = logger;
+    }
 
-        public PlaywrightLyricsScraper(ILogger<PlaywrightLyricsScraper> logger)
+    public async Task<string?> ScrapeLyricsAsync(string songUrl)
+    {
+        try
         {
-            _logger = logger;
-        }
-
-        public async Task<string?> ScrapeLyricsAsync(string songUrl)
-        {
-            using IPlaywright playwright = await Playwright.CreateAsync();
-            IBrowser browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+            using var playwright = await Playwright.CreateAsync();
+            
+            await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
                 Headless = true,
                 Args = new[]
                 {
-                        "--disable-gpu",
-                        "--no-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-extensions",
-                        "--disable-background-networking",
-                        "--disable-sync",
-                        "--disable-default-apps",
-                        "--disable-translate",
-                        "--disable-background-timer-throttling",
-                        "--disable-renderer-backgrounding",
-                        "--disable-device-discovery-notifications",
-                        "--mute-audio",
-                        "--blink-settings=imagesEnabled=false",
-                        "--disable-image-loading",
-                        "--disable-javascript-harmony-shipping",
-                        "--js-flags=--expose-gc",
-                        "--disable-threaded-animation",
-                        "--disable-threaded-scrolling",
-                        "--disable-composited-antialiasing"
-                    }
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-default-apps",
+                    "--disable-translate",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-device-discovery-notifications",
+                    "--mute-audio",
+                    "--blink-settings=imagesEnabled=false",
+                    "--disable-image-loading",
+                    "--disable-javascript-harmony-shipping",
+                    "--js-flags=--expose-gc",
+                    "--disable-threaded-animation",
+                    "--disable-threaded-scrolling",
+                    "--disable-composited-antialiasing"
+                }
             });
-            IBrowserContext context = await browser.NewContextAsync(new BrowserNewContextOptions
+            
+            var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
                 ViewportSize = new ViewportSize { Width = 800, Height = 600 },
                 UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 JavaScriptEnabled = true,
                 BypassCSP = true
             });
-            IPage page = await context.NewPageAsync();
+            
+            var page = await context.NewPageAsync();
 
-            try
+            // Block unnecessary resources
+            await page.RouteAsync("**/*.{png,jpg,jpeg,gif,webp,svg}", route => route.AbortAsync());
+            await page.RouteAsync("**/*.{css,woff,woff2,ttf,otf}", route => route.AbortAsync());
+
+            await page.GotoAsync(songUrl, new PageGotoOptions
             {
-                // Block image requests
-                await page.RouteAsync("**/*.{png,jpg,jpeg,gif,webp,svg}", route => route.AbortAsync());
+                WaitUntil = WaitUntilState.DOMContentLoaded,
+                Timeout = 30000
+            });
+            
+            await page.WaitForSelectorAsync("div[class*='Lyrics__Container']", new PageWaitForSelectorOptions { Timeout = 60000 });
 
-                // Block other unnecessary resources
-                await page.RouteAsync("**/*.{css,woff,woff2,ttf,otf}", route => route.AbortAsync());
+            var lyricsBlocks = await page.QuerySelectorAllAsync("div[class*='Lyrics__Container']");
+            var lyrics = new List<string>();
 
-                await page.GotoAsync(songUrl, new PageGotoOptions
-                {
-                    WaitUntil = WaitUntilState.DOMContentLoaded,
-                    Timeout = 30000
-                });
-                await page.WaitForSelectorAsync("div[class*='Lyrics__Container']", new PageWaitForSelectorOptions { Timeout = 60000 });
-
-                IReadOnlyList<IElementHandle> lyricsBlocks = await page.QuerySelectorAllAsync("div[class*='Lyrics__Container']");
-                List<string> lyrics = [];
-
-                foreach (var block in lyricsBlocks)
-                {
-                    string text = await block.InnerTextAsync();
-                    lyrics.Add(text.Trim());
-                }
-
-                await browser.CloseAsync();
-                return lyrics.Count > 0 ? string.Join("\n", lyrics) : null;
-            }
-            catch (Exception ex)
+            foreach (var block in lyricsBlocks)
             {
-                _logger.LogError(ex, "Error scraping lyrics for {SongUrl}", songUrl);
-                return null;
+                var text = await block.InnerTextAsync();
+                lyrics.Add(text.Trim());
             }
+
+            return lyrics.Count > 0 ? string.Join("\n", lyrics) : null;
+        }
+        catch (PlaywrightException ex) when (ex.Message.Contains("Executable doesn't exist"))
+        {
+            _logger.LogError("❌ Playwright browsers not installed!");
+            _logger.LogError("Run this command to fix: pwsh bin/Debug/net10.0/playwright.ps1 install");
+            return null;
+        }
+        catch (TimeoutException)
+        {
+            _logger.LogWarning("⏱️ Timeout waiting for lyrics on {Url}", songUrl);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error scraping lyrics for {Url}", songUrl);
+            return null;
         }
     }
 }
