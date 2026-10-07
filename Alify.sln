@@ -1,8 +1,19 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.13.35913.81
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "Documentation", "Documentation", "{9F4E7F06-4D23-4D5C-9E62-8C7D2D9A1C01}"
+	ProjectSection(SolutionItems) = preProject
+		Documentation\ArtistLyricService.md = Documentation\ArtistLyricService.md
+		Documentation\Aspire-Integration-Fixes.md = Documentation\Aspire-Integration-Fixes.md
+		Documentation\IMPLEMENTATION-PLAN.md = Documentation\IMPLEMENTATION-PLAN.md
+		Documentation\LyricsChatView.md = Documentation\LyricsChatView.md
+		Documentation\MASTER-STATUS.md = Documentation\MASTER-STATUS.md
+		Documentation\WhatsAppLyricsChat.md = Documentation\WhatsAppLyricsChat.md
+		Documentation\Widgets-Architecture.md = Documentation\Widgets-Architecture.md
+		Documentation\Widgets-PRD.md = Documentation\Widgets-PRD.md
+	EndProjectSection
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Alify.AppHost", "Alify.AppHost\Alify.AppHost.csproj", "{A1B2C3D4-E5F6-4789-ABCD-EF0123456789}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Alify.Core", "Alify.Core\Alify.Core.csproj", "{64EEBFE5-ADCC-4F9F-BA30-AB01D1FCD73C}"
