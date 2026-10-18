@@ -1,4 +1,7 @@
-﻿using Alify.Core.Models;
+using Alify.Core.Features.Analysis.Engine;
+using Alify.Core.Features.Analysis.Ledger;
+using Alify.Core.Features.Analysis.Models;
+using Alify.Core.Models;
 using Alify.Core.Services;
 using Alify.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -12,14 +15,24 @@ namespace Alify.Features.Spotify.Services
 		private readonly IMemoryCache _cache;
 		private readonly SpotifyRequestCache _spotifyRequest;
 		private readonly ArtistLyricService _artistLyricService;
+		private readonly FreeLyricsProviderService? _freeLyricsProvider;
+		private readonly CanonicalLyricNormalizer _normalizer = new();
+		private readonly HeuristicStanceEngine _heuristicEngine = new();
 		private readonly ILogger<QueueService> _logger;
         private readonly SemaphoreSlim _queueSemaphore = new(1, 1);
-        public QueueService(IMemoryCache cache, SpotifyRequestCache spotifyRequest, ArtistLyricService artistLyricService, ILogger<QueueService> logger)
+
+        public QueueService(
+            IMemoryCache cache, 
+            SpotifyRequestCache spotifyRequest, 
+            ArtistLyricService artistLyricService, 
+            ILogger<QueueService> logger,
+            FreeLyricsProviderService? freeLyricsProvider = null)
 		{
 			_cache = cache;
 			_spotifyRequest = spotifyRequest;
 			_artistLyricService = artistLyricService;
 			_logger = logger;
+            _freeLyricsProvider = freeLyricsProvider;
 		}
 		public async Task<MusicQueue?> GetQueueAsync(string userId,SpotifyClient spotify)
 		{
@@ -29,8 +42,8 @@ namespace Alify.Features.Spotify.Services
 			if (_cache.TryGetValue(cacheKey, out MusicQueue? cachedQueue) && cachedQueue != null && !cachedQueue.IsExpired)
 				return cachedQueue;
 
-			var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify);
-			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify);
+			var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify, userId);
+			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify, userId);
 
 			if (currentlyPlaying is null || queueResponse is null || 
                 currentlyPlaying.Item is not FullTrack currentTrack || 
@@ -43,35 +56,30 @@ namespace Alify.Features.Spotify.Services
 
             var newQueue = new MusicQueue();
 
-			newQueue.Tracks.Add(await BuildTrackAsync(currentTrack));
+			newQueue.Tracks.Add(BuildTrack(currentTrack));
 
 			foreach (var item in queue.Take(9))
 			{
 				if (item is FullTrack track)
 				{
-					newQueue.EnqueueTrack(await BuildTrackAsync(track));
+					newQueue.EnqueueTrack(BuildTrack(track));
 				}
 			}
-			_cache.Set(cacheKey, newQueue, TimeSpan.FromMinutes(11));
+			_cache.Set(cacheKey, newQueue, TimeSpan.FromSeconds(30));
 			newQueue.CachedAt = DateTime.UtcNow;
 			_logger.LogInformation("Queue for user {UserId} built with {TrackCount} tracks.", userId, newQueue.Tracks.Count);
 			return newQueue;
 		}
-		private async Task<Track> BuildTrackAsync(FullTrack track)
-		{
-			var artist = track.Artists.FirstOrDefault()?.Name ?? string.Empty;
-			var lyrics = await _spotifyRequest.GetTrackLyricsAsync(artist, track.Name) ?? string.Empty;
 
-			var queueTrack = new Track
+		private static Track BuildTrack(FullTrack track)
+		{
+			return new Track
 			{
 				FullTrack = track,
-				Lyrics = lyrics
+				IsFlagged = track.Explicit,
+				Lyrics = null,
+				MappedLyrics = null
 			};
-
-			queueTrack.MappedLyrics = await Task.Run(() =>
-				_artistLyricService.ParseLyricsWithArtistMapping(lyrics, artist));
-
-			return queueTrack;
 		}
 		public async Task<bool> ValidateQueueAsync(string userId, SpotifyClient spotify)
 		{
@@ -103,7 +111,7 @@ namespace Alify.Features.Spotify.Services
 			var queue = await GetQueueAsync(userId, spotify);
 			return queue?.Tracks.FirstOrDefault(t => t.FullTrack?.Id == trackId);
 		}
-        public async Task<Track?> SkipFlaggedSongsAsync(string userId, SpotifyClient spotify)
+        public async Task<SkipActionResult> SkipFlaggedSongsAsync(string userId, SpotifyClient spotify)
         {
             await _queueSemaphore.WaitAsync();
             try
@@ -112,19 +120,87 @@ namespace Alify.Features.Spotify.Services
                 if (queue?.CurrentTrack == null)
                 {
                     _logger.LogDebug("Queue is empty or no current track is playing for user {UserId}.", userId);
-                    return null;
+                    return SkipActionResult.NoAction(null, "Queue is empty or no current track");
                 }
 
-                if (queue.CurrentTrack.IsFlagged || queue.CurrentTrack.FullTrack?.Explicit == true)
+                var currentTarget = queue.CurrentTrack;
+                string skipReason = string.Empty;
+                bool isFlagged = currentTarget.IsFlagged;
+
+                // 1. Check official Spotify explicit metadata flag
+                if (!isFlagged && currentTarget.FullTrack?.Explicit == true)
                 {
-                    _logger.LogInformation("Skipping flagged track: {TrackName}", queue.CurrentTrack.FullTrack?.Name ?? "Unknown");
-                    await spotify.Player.SkipNext();
+                    isFlagged = true;
+                    currentTarget.IsFlagged = true;
+                    skipReason = "Official Spotify explicit metadata";
+                }
+
+                // 2. Automated open lyrics retrieval and heuristic stance evaluation
+                if (!isFlagged && _freeLyricsProvider != null && currentTarget.FullTrack != null)
+                {
+                    var artist = currentTarget.FullTrack.Artists?.FirstOrDefault()?.Name;
+                    var trackName = currentTarget.FullTrack.Name;
+
+                    if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(trackName))
+                    {
+                        var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
+                        if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
+                        {
+                            lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);
+                            _cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));
+                        }
+
+                        currentTarget.Lyrics = lyrics;
+
+                        if (!string.IsNullOrWhiteSpace(lyrics))
+                        {
+                            var sourceVersion = _normalizer.Normalize(lyrics, sourceId: currentTarget.FullTrack.Id);
+                            var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+
+                            var triggers = analysis.Findings
+                                .Where(f => (f.Topic == "Violence" || f.Topic == "SubstanceUse") &&
+                                            (f.Stance == Stance.Endorsed || f.Stance == Stance.Mentioned))
+                                .ToList();
+
+                            if (triggers.Count > 0)
+                            {
+                                isFlagged = true;
+                                currentTarget.IsFlagged = true;
+                                var summary = string.Join("; ", triggers.Select(t => $"{t.Topic}: {t.Stance} ({t.Evidence.Count} lines)"));
+                                skipReason = $"Lyrics content policy violation: {summary}";
+                                _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by lyrics analysis: {Summary}", trackName, artist, summary);
+                            }
+                        }
+                    }
+                }
+
+                if (isFlagged)
+                {
+                    _logger.LogInformation("Skipping flagged track: {TrackName} ({Reason})", currentTarget.FullTrack?.Name ?? "Unknown", skipReason);
+                    try
+                    {
+                        await spotify.Player.SkipNext();
+                    }
+                    catch (APIException apiEx)
+                    {
+                        _logger.LogError(apiEx, "Spotify API error when skipping track {TrackName}: {StatusCode}", currentTarget.FullTrack?.Name, apiEx.Response?.StatusCode);
+                        return SkipActionResult.Failed(currentTarget, $"Spotify API error {(int?)apiEx.Response?.StatusCode}: {apiEx.Message}");
+                    }
+                    catch (Exception ex) when (ex is HttpRequestException or TimeoutException or OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Network timeout or lost response during skip for {TrackName}. Marking OutcomeUnknown.", currentTarget.FullTrack?.Name);
+                        InvalidateQueue(userId);
+                        return SkipActionResult.OutcomeUnknown(currentTarget, $"Network timeout or response lost: {ex.Message}");
+                    }
 
                     queue.DequeueTrack();
                     var cacheKey = $"queue_{userId}";
                     _cache.Set(cacheKey, queue, TimeSpan.FromMinutes(5));
+
+                    return SkipActionResult.Success(currentTarget, queue.CurrentTrack, string.IsNullOrEmpty(skipReason) ? "Flagged content" : skipReason);
                 }
-                return queue.CurrentTrack;
+
+                return SkipActionResult.NoAction(currentTarget);
             }
             finally
             {

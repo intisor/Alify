@@ -10,7 +10,7 @@ namespace Alify.Services
     public class SpotifyRequestCache
     {
         private readonly IMemoryCache _memoryCache;
-        private readonly TimeSpan _cacheTimeout = TimeSpan.FromSeconds(50);
+        private readonly TimeSpan _cacheTimeout = TimeSpan.FromSeconds(3); // 3s deduplication window instead of 50s
         private readonly ILogger<SpotifyRequestCache> _logger;
         private readonly FreeLyricsProviderService _freeLyricsProvider;
 
@@ -21,9 +21,16 @@ namespace Alify.Services
             _freeLyricsProvider = freeLyricsProvider;
         }
 
-        public async Task<CurrentlyPlaying?> GetCurrentlyPlayingAsync(SpotifyClient spotify)
+        public async Task<CurrentlyPlaying?> GetCurrentlyPlayingAsync(SpotifyClient spotify, string? userId = null, bool forceRefresh = false)
         {
-            return await _memoryCache.GetOrCreateAsync("CurrentlyPlaying", async entry =>
+            var cacheKey = string.IsNullOrEmpty(userId) ? "CurrentlyPlaying" : $"CurrentlyPlaying_{userId}";
+
+            if (forceRefresh)
+            {
+                _memoryCache.Remove(cacheKey);
+            }
+
+            return await _memoryCache.GetOrCreateAsync(cacheKey, async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = _cacheTimeout;
                 try
@@ -43,9 +50,16 @@ namespace Alify.Services
             });
         }
 
-        public async Task<QueueResponse?> GetQueueAsync(SpotifyClient spotify)
+        public async Task<QueueResponse?> GetQueueAsync(SpotifyClient spotify, string? userId = null, bool forceRefresh = false)
         {
-            return await _memoryCache.GetOrCreateAsync("Queue", async entry =>
+            var cacheKey = string.IsNullOrEmpty(userId) ? "Queue" : $"Queue_{userId}";
+
+            if (forceRefresh)
+            {
+                _memoryCache.Remove(cacheKey);
+            }
+
+            return await _memoryCache.GetOrCreateAsync(cacheKey, async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = _cacheTimeout;
                 try
@@ -141,12 +155,18 @@ namespace Alify.Services
             });
         }
 
-        public void ClearCache()
+        public void ClearCache(string? userId = null)
         {
             _memoryCache.Remove("CurrentlyPlaying");
             _memoryCache.Remove("Queue");
             _memoryCache.Remove("CurrentlyPlayingLyrics");
             _memoryCache.Remove("CurrentlyPlayingLyricsModeration");
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                _memoryCache.Remove($"CurrentlyPlaying_{userId}");
+                _memoryCache.Remove($"Queue_{userId}");
+            }
         }
     }
 }

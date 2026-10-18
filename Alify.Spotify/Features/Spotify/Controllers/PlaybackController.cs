@@ -20,9 +20,9 @@ namespace Alify.Controllers
         }
 
         [HttpGet("current")]
-        [OutputCache(Duration = 10)]
         public async Task<ActionResult<SpotifyPlaybackInfo>> GetCurrentPlayback()
         {
+            Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
             if (string.IsNullOrEmpty(accessToken))
             {

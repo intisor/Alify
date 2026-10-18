@@ -5,24 +5,22 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "http://127.0.0.1:7236",
+      "applicationUrl": "http://127.0.0.1:5001",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Spotify__ClientId": "8e7203f064b5418ca7d0be7b56723064",
-        "Spotify__ClientSecret": "a53aab4821414b31a338f1c58c36c38a",
-        "Spotify__RedirectUri": "http://127.0.0.1:7236/callback"
+        "Spotify__ClientId": "21300c3132f64c0ab1a755a6e5b0d1e8",
+        "Spotify__RedirectUri": "http://127.0.0.1:5001/callback"
       }
     },
     "https": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "https://127.0.0.1:7236",
+      "applicationUrl": "https://127.0.0.1:5001",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "Spotify__ClientId": "8e7203f064b5418ca7d0be7b56723064",
-        "Spotify__ClientSecret": "a53aab4821414b31a338f1c58c36c38a",
-        "Spotify__RedirectUri": "http://127.0.0.1:7236/callback"
+        "Spotify__ClientId": "21300c3132f64c0ab1a755a6e5b0d1e8",
+        "Spotify__RedirectUri": "http://127.0.0.1:5001/callback"
       }
     }
   }

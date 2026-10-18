@@ -286,16 +286,16 @@ public sealed class SpotifyPlaybackMonitorService(
 
     private async Task<int?> ProcessFlaggedContent(string userId, dynamic spotify)
     {
-        var skippedTrack = await queueService.SkipFlaggedSongsAsync(userId, spotify);
+        var result = await queueService.SkipFlaggedSongsAsync(userId, spotify);
 
-        if (skippedTrack?.IsFlagged is true)
+        if (result.Skipped && result.TargetTrack != null)
         {
             _edgeCaseState.OnTrackSkipped();
 
-            await spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
+            await spotifySubject.NotifyTrackSkippedEventAsync(result.TargetTrack);
             logger.LogInformation("Track skipped and observers notified: {TrackName} by {Artist}",
-                (object)skippedTrack.FullTrack.Name,
-                (object)(skippedTrack.FullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown"));
+                (object)(result.TargetTrack.FullTrack?.Name ?? "Unknown"),
+                (object)(result.TargetTrack.FullTrack?.Artists?.FirstOrDefault()?.Name ?? "Unknown"));
 
             return _options.PostSkipCheckDelayMs;
         }

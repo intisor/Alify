@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using SpotifyAPI.Web;
 using System;
@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Alify.Services;
 using Serilog;
 using Alify.Core.Models;
+using Alify.Core.Infrastructure.Security;
 using Alify.Features.Spotify.Events;
 using Alify.Features.Spotify.Services;
 using Microsoft.Extensions.Logging;
@@ -84,24 +85,39 @@ public class SpotifyService
     {
         // Get configuration values from appsettings.json or user secrets
         var clientId = _spotifyOptions.ClientId!;
-        var redirectUri = _spotifyOptions.RedirectUri!;
+        // Determine redirect URI: use configured default or dynamic host if accessed via domain/tunnel
+        var redirectUri = _spotifyOptions.RedirectUri ?? "http://127.0.0.1:5001/callback";
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.Request?.Host.HasValue == true)
+        {
+            var host = httpContext.Request.Host.Value;
+            var scheme = httpContext.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? httpContext.Request.Scheme;
+            if (!host.StartsWith("127.0.0.1") && !host.StartsWith("localhost"))
+            {
+                redirectUri = $"{scheme}://{host}/callback";
+            }
+        }
+        Session.SetString("SpotifyRedirectUri", redirectUri);
         
         // Generate a unique state to prevent CSRF attacks
-        // This is a security measure required by the OAuth 2.0 spec
-        var state = Guid.NewGuid().ToString();
+        var state = Guid.NewGuid().ToString("N");
         Session.SetString("SpotifyState", state);
 
-        // Create the authorization request with the necessary scopes
-        // Scopes determine what actions the app is allowed to perform on behalf of the user
+        // Generate PKCE code_verifier and S256 code_challenge
+        var codeVerifier = PkceUtil.GenerateCodeVerifier();
+        var codeChallenge = PkceUtil.GenerateCodeChallenge(codeVerifier);
+        Session.SetString("SpotifyCodeVerifier", codeVerifier);
+
+        // Create the authorization request with least-privilege scopes and PKCE S256 challenge
         var loginRequest = new LoginRequest(new Uri(redirectUri), clientId, LoginRequest.ResponseType.Code)
         {
+            CodeChallengeMethod = "S256",
+            CodeChallenge = codeChallenge,
             Scope = new[]
             {
                 Scopes.UserReadCurrentlyPlaying,    // Allows reading the currently playing track
                 Scopes.UserReadPlaybackState,       // Allows reading the playback state (volume, repeat, etc.)
-                Scopes.UserModifyPlaybackState,     // Allows controlling playback (play, pause, skip, etc.)
-                Scopes.PlaylistModifyPrivate,       // Allows modifying private playlists
-                Scopes.PlaylistModifyPublic         // Allows modifying public playlists
+                Scopes.UserModifyPlaybackState      // Allows controlling playback (play, pause, skip, etc.)
             },
             State = state
         };
@@ -109,15 +125,11 @@ public class SpotifyService
     }
 
     /// <summary>
-    /// Handles the callback from Spotify after user authorization, exchanging the authorization code for an access token.
+    /// Handles the callback from Spotify after user authorization, exchanging the authorization code for an access token via PKCE.
     /// </summary>
     /// <param name="code">The authorization code from Spotify.</param>
     /// <param name="state">The state parameter for CSRF protection.</param>
     /// <returns>True if authentication was successful, otherwise false.</returns>
-    /// <remarks>
-    /// This is called when the user is redirected back from Spotify's authorization page.
-    /// It verifies the state parameter to prevent CSRF attacks and exchanges the authorization code for tokens.
-    /// </remarks>
     public async Task<bool> UpdateAuthAsync(string code, string state)      
     {
         // Verify state to prevent cross-site request forgery attacks
@@ -127,15 +139,25 @@ public class SpotifyService
             return false;
         }
 
-        // State is only used once, so remove it from session
-        Session.Remove("SpotifyState");
+        var codeVerifier = Session.GetString("SpotifyCodeVerifier");
+        if (string.IsNullOrEmpty(codeVerifier))
+        {
+            return false;
+        }
 
-        // Exchange the authorization code for access and refresh tokens
-        var tokenResponse = await new OAuthClient().RequestToken(new AuthorizationCodeTokenRequest(
+        var redirectUri = Session.GetString("SpotifyRedirectUri") ?? _spotifyOptions.RedirectUri!;
+
+        // State and verifier are single-use, remove them from session
+        Session.Remove("SpotifyState");
+        Session.Remove("SpotifyCodeVerifier");
+        Session.Remove("SpotifyRedirectUri");
+
+        // Exchange the authorization code for access and refresh tokens via PKCE (no client secret needed)
+        var tokenResponse = await new OAuthClient().RequestToken(new PKCETokenRequest(
             _spotifyOptions.ClientId!,
-            _spotifyOptions.ClientSecret!,
             code,
-            new Uri(_spotifyOptions.RedirectUri!)
+            new Uri(redirectUri),
+            codeVerifier
         ));
 
         // Store tokens and expiry date in the session for future use
@@ -217,10 +239,9 @@ public class SpotifyService
             return false;
         }
 
-        // Request a new access token using the refresh token
-        var newResponse = await new OAuthClient().RequestToken(new AuthorizationCodeRefreshRequest(
+        // Request a new access token using the refresh token via PKCE (no client secret needed)
+        var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
             _spotifyOptions.ClientId!,
-            _spotifyOptions.ClientSecret!,
             refreshToken
         ));
 
@@ -258,6 +279,10 @@ public class SpotifyService
         Session.Remove("SpotifyRefreshToken");
         Session.Remove("SpotifyTokenExpiry");
         Session.Remove("SpotifyState");
+        Session.Remove("SpotifyCodeVerifier");
+
+        // Clear cached background auth token (AUD-005)
+        _cache.Remove("SpotifyAuthToken");
     }
 
     /// <summary>
@@ -269,35 +294,15 @@ public class SpotifyService
     /// This method enhances the basic track data from Spotify with lyrics and content moderation
     /// information, which is used for the content filtering feature of the application.
     /// </remarks>
-    private async Task<Track> CreateTrackFromFullTrackAsync(FullTrack fullTrack)
+    private static Track CreateTrackFromFullTrack(FullTrack fullTrack)
     {
-        // A track's URI or ID is a perfect unique key for caching.
-        var cacheKey = $"Track_{fullTrack.Id}";
-
-        // 1. Try to get the fully processed track from the cache first.
-        if (_cache.TryGetValue(cacheKey, out Track? cachedTrack))
-        {
-            return cachedTrack!;
-        }
-
-        // 2. If not in cache, perform the expensive processing.
-        var artistName = fullTrack.Artists.FirstOrDefault()?.Name ?? "Unknown Artist";
-        var lyrics = await _freeLyricsProvider.GetLyricsAsync(artistName, fullTrack.Name);
-        // Note: Moderation should be handled by a separate AI service if needed
-        var isFlagged = fullTrack.Explicit;
-
-        var newTrack = new Track
+        return new Track
         {
             FullTrack = fullTrack,
-            Lyrics = lyrics,
-            IsFlagged = isFlagged
+            IsFlagged = fullTrack.Explicit,
+            Lyrics = null,
+            MappedLyrics = null
         };
-
-        // 3. Store the newly created Track object in the cache for future requests.
-        // We'll cache it for an hour; adjust as needed.
-        _cache.Set(cacheKey, newTrack, TimeSpan.FromHours(1));
-
-        return newTrack;
     }
 
     /// <summary>
@@ -306,10 +311,6 @@ public class SpotifyService
     /// </summary>
     /// <param name="spotify">The SpotifyClient instance.</param>
     /// <returns>A SpotifyPlaybackInfo object, or null if no track is playing.</returns>
-    /// <remarks>
-    /// This method is the central point for getting playback information and is used by 
-    /// both the UI components and the background monitoring service.
-    /// </remarks>
     public async Task<SpotifyPlaybackInfo?> GetCurrentPlaybackInfoAsync(SpotifyClient spotify)
     {
         _cache.TryGetValue("SpotifyUserId", out string? userId);
@@ -324,8 +325,7 @@ public class SpotifyService
         }
         _cache.Set("SpotifyUserId", userId, TimeSpan.FromHours(1));
 
-
-        var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify);
+        var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify, userId);
         if (currentlyPlayingResponse?.Item is not FullTrack currentTrack) return null;
 
         var isQueueValid = await _queueService.ValidateQueueAsync(userId, spotify);
@@ -339,7 +339,7 @@ public class SpotifyService
         if (queue == null || queue.IsEmpty) return null;
         var playbackInfo = new SpotifyPlaybackInfo
         {
-            CurrentlyPlaying = queue.CurrentTrack ?? await CreateTrackFromFullTrackAsync(currentTrack),
+            CurrentlyPlaying = queue.CurrentTrack ?? CreateTrackFromFullTrack(currentTrack),
             RemainingTimeMs = currentTrack.DurationMs - (currentlyPlayingResponse.ProgressMs ?? 0),
             Queue = [.. queue.Tracks.Skip(1)], 
         };
@@ -371,13 +371,15 @@ public class SpotifyService
             return null;
         }
 
-        var skippedTrack = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
-        if (skippedTrack != null && skippedTrack.IsFlagged)
+        var result = await _queueService.SkipFlaggedSongsAsync(userId, spotify);
+        if (result.Skipped && result.TargetTrack != null)
         {
-            Log.Logger.Information("SkipIfFlaggedAsync: Skipped flagged track: {TrackName} by {Artist}", skippedTrack.FullTrack?.Name ?? "Unknown", skippedTrack.FullTrack?.Artists.FirstOrDefault()?.Name ?? "Unknown");
-            await _spotifySubject.NotifyTrackSkippedEventAsync(skippedTrack);
+            Log.Logger.Information("SkipIfFlaggedAsync: Skipped flagged track: {TrackName} by {Artist}",
+                result.TargetTrack.FullTrack?.Name ?? "Unknown",
+                result.TargetTrack.FullTrack?.Artists?.FirstOrDefault()?.Name ?? "Unknown");
+            await _spotifySubject.NotifyTrackSkippedEventAsync(result.TargetTrack);
 
-            return skippedTrack;
+            return result.TargetTrack;
         }
         else
         {
