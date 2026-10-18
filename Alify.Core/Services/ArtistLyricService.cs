@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Alify.Core.Models;
 
@@ -35,7 +35,7 @@ namespace Alify.Core.Services
         /// </summary>
         /// <param name="lyrics">The full lyrics of a song as a single string.</param>
         /// <returns>A <see cref="LyricMapping"/> object containing the structured lyric data.</returns>
-        public LyricMapping ParseLyricsWithArtistMapping(string lyrics, string mainArtist = null)
+        public LyricMapping ParseLyricsWithArtistMapping(string lyrics, string? mainArtist = null)
         {
             if (string.IsNullOrWhiteSpace(lyrics))
             {
@@ -48,8 +48,8 @@ namespace Alify.Core.Services
             // BOOKMARK: State Management during Parsing
             // These variables keep track of the current artist and section as we iterate through the lines.
             // This is a state machine approach to parsing.
-            string currentArtist = mainArtist;
-            string currentSection = null;
+            string? currentArtist = mainArtist;
+            string? currentSection = null;
             int lineNumber = 1;
 
             foreach (var rawLine in lines)
