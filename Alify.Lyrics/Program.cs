@@ -2,6 +2,10 @@ using Alify.Core.Infrastructure.Doppler;
 using Alify.Core.Models;
 using Alify.Core.Services;
 using Alify.Services;
+using Alify.Core.Features.Storage;
+using Alify.Core.Features.Lyrics.Import;
+using Alify.Core.Features.Analysis.Engine;
+using Alify.Core.Features.Analysis.Engine.Gemini;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System.Security.Authentication;
@@ -54,6 +58,15 @@ builder.Services.AddHttpClient();
 builder.Services.Configure<ApiKeys>(builder.Configuration.GetSection("ApiKeys"));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ArtistLyricService>();
+
+// Register independent semantic foundation and storage services (ALI-016 / ALI-017 / ALI-019 / ALI-020)
+var ledgerDbPath = Path.Combine(builder.Environment.ContentRootPath, "alify_ledger.db");
+var ledgerRepo = new SqliteLedgerRepository($"Data Source={ledgerDbPath};Foreign Keys=True");
+ledgerRepo.InitializeSchemaAsync().GetAwaiter().GetResult();
+builder.Services.AddSingleton<ISqliteLedgerRepository>(ledgerRepo);
+builder.Services.AddSingleton<PermissionedImportService>();
+builder.Services.AddSingleton<HeuristicStanceEngine>();
+builder.Services.AddSingleton(new BudgetLedger(50));
 
 // Configure a dedicated HttpClient for LyricService with modern SSL protocols
 builder.Services.AddHttpClient<LyricService>((serviceProvider, client) =>

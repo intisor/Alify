@@ -1,0 +1,81 @@
+@page
+@model Alify.Lyrics.Pages.Lyrics.ImportModel
+@{
+    ViewData["Title"] = "Permissioned Lyric Import";
+}
+
+<div class="import-container" style="max-width: 760px; margin: 2rem auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+        <h1 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin-top: 0; margin-bottom: 0.5rem;">
+            Permissioned Lyric Import
+        </h1>
+        <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5;">
+            Import lyrics for local, privacy-first semantic analysis. All imports are stored in an immutable, local-only ledger with cryptographic hash verification.
+        </p>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div style="background-color: #fef2f2; border: 1px solid #f87171; color: #b91c1c; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                <strong>Import Error:</strong> @Model.ErrorMessage
+            </div>
+        }
+
+        <form method="post">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <label asp-for="Title" style="display: block; font-weight: 600; color: #334155; margin-bottom: 0.25rem; font-size: 0.9rem;">Track Title *</label>
+                    <input asp-for="Title" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" placeholder="e.g. Blinding Lights" required />
+                    <span asp-validation-for="Title" style="color: #dc2626; font-size: 0.8rem;"></span>
+                </div>
+                <div>
+                    <label asp-for="Artist" style="display: block; font-weight: 600; color: #334155; margin-bottom: 0.25rem; font-size: 0.9rem;">Artist / Group *</label>
+                    <input asp-for="Artist" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" placeholder="e.g. The Weeknd" required />
+                    <span asp-validation-for="Artist" style="color: #dc2626; font-size: 0.8rem;"></span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <label asp-for="Album" style="display: block; font-weight: 600; color: #334155; margin-bottom: 0.25rem; font-size: 0.9rem;">Album (Optional)</label>
+                    <input asp-for="Album" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" placeholder="e.g. After Hours" />
+                </div>
+                <div>
+                    <label asp-for="VersionLabel" style="display: block; font-weight: 600; color: #334155; margin-bottom: 0.25rem; font-size: 0.9rem;">Edition / Version</label>
+                    <select asp-for="VersionLabel" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; background: white;">
+                        <option value="Original">Original</option>
+                        <option value="Clean">Clean</option>
+                        <option value="Explicit">Explicit</option>
+                        <option value="Live">Live</option>
+                        <option value="Remix">Remix</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label asp-for="LyricsText" style="display: block; font-weight: 600; color: #334155; margin-bottom: 0.25rem; font-size: 0.9rem;">Lyrics Text (Paste) *</label>
+                <textarea asp-for="LyricsText" rows="12" style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 0.9rem; box-sizing: border-box;" placeholder="[Verse 1]&#10;Paste lyric lines here..."></textarea>
+                <span asp-validation-for="LyricsText" style="color: #dc2626; font-size: 0.8rem;"></span>
+                <p style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.25rem;">Section tags like [Verse], [Chorus], and [Bridge] will be automatically parsed.</p>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.5rem;">
+                    <input type="checkbox" asp-for="AttestPermission" id="AttestPermission" style="margin-top: 0.25rem; width: 1.1rem; height: 1.1rem;" required />
+                    <label for="AttestPermission" style="font-size: 0.875rem; color: #1e293b; line-height: 1.4;">
+                        <strong>Permission & Rights Attestation (Required):</strong> I attest that I have lawful possession or consent to process these lyrics locally for private personal analysis. I understand this data remains on my local device.
+                    </label>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <input type="checkbox" asp-for="IsInstrumental" id="IsInstrumental" style="width: 1.1rem; height: 1.1rem;" />
+                    <label for="IsInstrumental" style="font-size: 0.875rem; color: #64748b;">
+                        Mark recording as purely Instrumental (no sung lyrics)
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit" style="background-color: #2563eb; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: background 0.2s;">
+                Normalize & Save to Ledger
+            </button>
+        </form>
+    </div>
+</div>

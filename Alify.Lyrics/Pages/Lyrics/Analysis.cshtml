@@ -1,0 +1,314 @@
+@page
+@model Alify.Lyrics.Pages.Lyrics.AnalysisModel
+@using Alify.Core.Features.Analysis.Models
+@using Alify.Core.Features.Analysis.Ledger
+@{
+    ViewData["Title"] = "Semantic Analysis & Review";
+}
+
+<style>
+    .highlighted-line {
+        background-color: #fef08a !important;
+        transition: background-color 0.4s ease;
+    }
+    .line-row:hover {
+        background-color: #f1f5f9;
+    }
+    .badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .badge-endorsed { background-color: #fee2e2; color: #991b1b; }
+    .badge-mentioned { background-color: #dbeafe; color: #1e40af; }
+    .badge-rejected { background-color: #dcfce7; color: #166534; }
+    .badge-ambiguous { background-color: #f1f5f9; color: #475569; }
+    .badge-allow { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-recommendskip { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-abstain { background-color: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+</style>
+
+<div style="max-width: 1200px; margin: 1.5rem auto; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 0 1rem;">
+    <!-- Header Banner -->
+    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div>
+            @if (Model.SourceRecord != null)
+            {
+                <h1 style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin: 0 0 0.25rem 0;">
+                    @Model.SourceRecord.Recording.Title
+                    <span style="font-weight: 400; color: #64748b; font-size: 1.1rem;">by @string.Join(", ", Model.SourceRecord.Recording.Artists)</span>
+                </h1>
+                <div style="font-size: 0.8rem; color: #64748b; display: flex; gap: 1rem;">
+                    <span>Edition: <strong>@Model.SourceRecord.Recording.VersionLabel</strong></span>
+                    <span>Ledger Hash: <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 4px;">@Model.SourceRecord.CurrentVersion.CanonicalContentHash.Substring(0, Math.Min(12, Model.SourceRecord.CurrentVersion.CanonicalContentHash.Length))…</code></span>
+                    <span>Source: <strong>@Model.SourceRecord.Kind</strong></span>
+                </div>
+            }
+            else
+            {
+                <h1 style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin: 0;">Semantic Analysis</h1>
+            }
+        </div>
+        <div>
+            <a asp-page="/Lyrics/Import" style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 0.5rem 1rem; border-radius: 6px; color: #334155; font-size: 0.875rem; text-decoration: none; font-weight: 500;">
+                + Import Another Song
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Messages -->
+    @if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div style="background-color: #f0fdf4; border: 1px solid #86efac; color: #166534; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+            @Model.StatusMessage
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div style="background-color: #fef2f2; border: 1px solid #f87171; color: #b91c1c; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+            @Model.ErrorMessage
+        </div>
+    }
+
+    <!-- 2-Column Grid -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+        
+        <!-- Left Column: Immutable Source Lyric Ledger -->
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); max-height: 85vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                <h2 style="font-size: 1.1rem; font-weight: 600; color: #1e293b; margin: 0;">Canonical Ledger Text</h2>
+                <span style="font-size: 0.8rem; color: #64748b;">@Model.SourceRecord?.CurrentVersion.Lines.Count lines</span>
+            </div>
+
+            @if (Model.SourceRecord != null)
+            {
+                <table style="width: 100%; border-collapse: collapse; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.875rem;">
+                    <tbody>
+                        @foreach (var line in Model.SourceRecord.CurrentVersion.Lines)
+                        {
+                            <tr id="line-@line.LineNumber" class="line-row" style="border-bottom: 1px solid #f8fafc;">
+                                <td style="width: 45px; text-align: right; padding: 0.35rem 0.75rem 0.35rem 0; color: #94a3b8; user-select: none; font-size: 0.75rem;">
+                                    <a href="#line-@line.LineNumber" style="color: inherit; text-decoration: none;">@line.LineNumber</a>
+                                </td>
+                                <td style="padding: 0.35rem 0.5rem;">
+                                    @if (line.Kind == SourceLineKind.Section)
+                                    {
+                                        <span style="color: #6366f1; font-weight: 600;">@line.RawText</span>
+                                    }
+                                    else if (line.Kind == SourceLineKind.Blank)
+                                    {
+                                        <span>&nbsp;</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: #1e293b;">@line.CanonicalText</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <!-- Right Column: Analysis, Evidence Cards & Audit -->
+        <div>
+            <!-- Policy Decision Card -->
+            @if (Model.CurrentPolicy != null)
+            {
+                var badgeClass = Model.CurrentPolicy.Decision switch
+                {
+                    PolicyDecision.Allow => "badge-allow",
+                    PolicyDecision.RecommendSkip => "badge-recommendskip",
+                    _ => "badge-abstain"
+                };
+
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <span style="font-size: 0.8rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Deterministic Policy Output</span>
+                        <span class="badge @badgeClass" style="font-size: 0.85rem; padding: 0.25rem 0.75rem;">@Model.CurrentPolicy.Decision</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #475569; margin-bottom: 0.5rem;">
+                        Reasons: <strong>@(Model.CurrentPolicy.ReasonCodes.Count > 0 ? string.Join(", ", Model.CurrentPolicy.ReasonCodes) : "No triggers fired")</strong>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #94a3b8; background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+                        Disclaimer: Standalone recommendation for personal information only. Strictly decoupled from Spotify playback controls.
+                    </div>
+                </div>
+            }
+
+            <!-- Analysis Run Controls -->
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <h3 style="font-size: 1rem; font-weight: 600; color: #1e293b; margin: 0 0 0.75rem 0;">Run Semantic Interpretation</h3>
+                
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <!-- Heuristic Run Form -->
+                    <form method="post" asp-page-handler="RunHeuristic" style="flex: 1;">
+                        <input type="hidden" name="sourceId" value="@Model.SourceRecord?.SourceId" />
+                        <button type="submit" style="width: 100%; background: #0284c7; color: white; border: none; padding: 0.65rem; border-radius: 6px; font-weight: 600; font-size: 0.875rem; cursor: pointer;">
+                            Run Offline Heuristic Engine
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Gemini BYOK Toggle Form -->
+                <details style="border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
+                    <summary style="font-size: 0.875rem; font-weight: 600; color: #475569; cursor: pointer;">
+                        Optional: Run Google Gemini BYOK Model (Remaining Budget: @Model.RemainingBudget)
+                    </summary>
+                    <form method="post" asp-page-handler="RunGemini" style="margin-top: 0.75rem;">
+                        <input type="hidden" name="sourceId" value="@Model.SourceRecord?.SourceId" />
+                        <div style="margin-bottom: 0.5rem;">
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Gemini API Key</label>
+                            <input type="password" name="apiKey" style="width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" placeholder="AIzaSy..." required />
+                        </div>
+                        <div style="margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <input type="checkbox" name="userConsent" value="true" id="userConsent" required style="margin-top: 0.2rem;" />
+                            <label for="userConsent" style="font-size: 0.75rem; color: #64748b; line-height: 1.3;">
+                                I consent to transmitting normalized lyrics to Google Gemini for stance interpretation. No Spotify tokens or private IDs are sent.
+                            </label>
+                        </div>
+                        <button type="submit" style="background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+                            Execute Gemini Analysis
+                        </button>
+                    </form>
+                </details>
+            </div>
+
+            <!-- Evidence Cards (Findings) -->
+            @if (Model.LatestAnalysis != null)
+            {
+                <div style="margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <h3 style="font-size: 1rem; font-weight: 600; color: #1e293b; margin: 0;">
+                            Evidence Cards (@Model.LatestAnalysis.Findings.Count findings)
+                        </h3>
+                        <span style="font-size: 0.75rem; color: #64748b;">Engine: @Model.LatestAnalysis.EngineKind</span>
+                    </div>
+
+                    @if (Model.LatestAnalysis.Findings.Count == 0)
+                    {
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; color: #64748b; font-size: 0.875rem;">
+                            No triggering stances or harmful topics detected in this source text.
+                        </div>
+                    }
+
+                    @foreach (var finding in Model.LatestAnalysis.Findings)
+                    {
+                        var stanceBadgeClass = finding.Stance switch
+                        {
+                            Stance.Endorsed => "badge-endorsed",
+                            Stance.Mentioned => "badge-mentioned",
+                            Stance.Rejected => "badge-rejected",
+                            _ => "badge-ambiguous"
+                        };
+
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <strong style="font-size: 0.95rem; color: #0f172a; text-transform: capitalize;">@finding.Topic</strong>
+                                    <span class="badge @stanceBadgeClass">@finding.Stance</span>
+                                </div>
+                                <span style="font-size: 0.75rem; color: #64748b;">Mode: @finding.Expression</span>
+                            </div>
+
+                            <p style="font-size: 0.85rem; color: #334155; margin: 0 0 0.5rem 0; line-height: 1.4;">
+                                @finding.Rationale
+                            </p>
+
+                            <!-- Citations -->
+                            @if (finding.Evidence.Count > 0)
+                            {
+                                <div style="border-top: 1px dashed #e2e8f0; padding-top: 0.5rem; margin-top: 0.5rem;">
+                                    <span style="font-size: 0.75rem; font-weight: 600; color: #64748b; display: block; margin-bottom: 0.25rem;">Verifiable Evidence Citations:</span>
+                                    @foreach (var ev in finding.Evidence)
+                                    {
+                                        <div style="font-size: 0.8rem; background: #f8fafc; border-left: 3px solid #6366f1; padding: 0.35rem 0.5rem; margin-bottom: 0.25rem; border-radius: 0 4px 4px 0;">
+                                            <a href="#line-@ev.StartLine" onclick="highlightLine(@ev.StartLine)" style="font-weight: 600; color: #4338ca; text-decoration: none;">
+                                                Lines @ev.StartLine–@ev.EndLine:
+                                            </a>
+                                            <span style="color: #334155; font-style: italic;">"@ev.QuotedText"</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            <!-- Review Submission Form for this Finding -->
+                            <details style="margin-top: 0.5rem; font-size: 0.8rem; border-top: 1px solid #f1f5f9; padding-top: 0.4rem;">
+                                <summary style="color: #6366f1; cursor: pointer; font-weight: 500;">Audit / Correct Finding</summary>
+                                <form method="post" asp-page-handler="SubmitReview" style="margin-top: 0.5rem;">
+                                    <input type="hidden" name="sourceId" value="@Model.SourceRecord?.SourceId" />
+                                    <input type="hidden" name="analysisId" value="@Model.LatestAnalysis.AnalysisId" />
+                                    <input type="hidden" name="findingId" value="@finding.FindingId" />
+                                    
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <div>
+                                            <label style="display: block; font-weight: 500; color: #475569;">Disposition</label>
+                                            <select name="disposition" style="width: 100%; padding: 0.3rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; background: white;">
+                                                <option value="Agree">Agree</option>
+                                                <option value="Disagree">Disagree</option>
+                                                <option value="NeedsContext">Needs Context</option>
+                                                <option value="Unresolved">Unresolved</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="display: block; font-weight: 500; color: #475569;">Reviewer</label>
+                                            <input type="text" name="reviewerId" value="local-user" style="width: 100%; padding: 0.3rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; box-sizing: border-box;" />
+                                        </div>
+                                    </div>
+                                    <div style="margin-bottom: 0.5rem;">
+                                        <label style="display: block; font-weight: 500; color: #475569;">Rationale *</label>
+                                        <input type="text" name="rationale" placeholder="State reason for agreement or correction..." required style="width: 100%; padding: 0.3rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; box-sizing: border-box;" />
+                                    </div>
+                                    <button type="submit" style="background: #334155; color: white; border: none; padding: 0.35rem 0.75rem; border-radius: 4px; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
+                                        Record Review Revision
+                                    </button>
+                                </form>
+                            </details>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Append-Only Review Audit History (ALI-022) -->
+            @if (Model.Reviews.Count > 0)
+            {
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <h3 style="font-size: 1rem; font-weight: 600; color: #1e293b; margin: 0 0 0.75rem 0;">
+                        Append-Only Review History (@Model.Reviews.Count revisions)
+                    </h3>
+                    <div style="font-size: 0.8rem;">
+                        @foreach (var review in Model.Reviews)
+                        {
+                            <div style="border-left: 2px solid #cbd5e1; padding-left: 0.75rem; margin-bottom: 0.75rem;">
+                                <div style="display: flex; justify-content: space-between;">
+                                    <span>
+                                        <strong>Rev #@review.Revision</strong>: <span style="font-weight: 600;">@review.Disposition</span> by <code>@review.ReviewerId</code>
+                                    </span>
+                                    <span style="color: #94a3b8; font-size: 0.75rem;">@review.ReviewedAtUtc.ToLocalTime().ToString("HH:mm:ss")</span>
+                                </div>
+                                <div style="color: #475569; margin-top: 0.2rem;">@review.Rationale</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+    function highlightLine(lineNum) {
+        var el = document.getElementById('line-' + lineNum);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('highlighted-line');
+            setTimeout(function () {
+                el.classList.remove('highlighted-line');
+            }, 2000);
+        }
+    }
+</script>
