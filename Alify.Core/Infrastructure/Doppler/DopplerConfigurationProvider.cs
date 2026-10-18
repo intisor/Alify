@@ -29,7 +29,7 @@ public class DopplerConfigurationProvider : ConfigurationProvider
 
         var cacheKey = $"DopplerSecrets_{_dopplerToken}";
 
-        Data = _cache.GetOrCreate(cacheKey, entry =>
+        Data = _cache.GetOrCreate<IDictionary<string, string?>>(cacheKey, entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = _cacheDuration;
             try
@@ -41,7 +41,7 @@ public class DopplerConfigurationProvider : ConfigurationProvider
                 response.EnsureSuccessStatusCode();
 
                 var json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                var secrets = JsonSerializer.Deserialize<Dictionary<string, string>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var secrets = JsonSerializer.Deserialize<Dictionary<string, string?>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 return secrets?.ToDictionary(
                     k => k.Key.Replace("__", ":"),
@@ -53,7 +53,7 @@ public class DopplerConfigurationProvider : ConfigurationProvider
                 _logger?.LogError(ex, "Error loading secrets from Doppler. Returning empty configuration.");
                 return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             }
-        });
+        }) ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
     }
 }
 
