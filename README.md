@@ -1,109 +1,87 @@
-# Alify - Music Streaming Application
+# Alify — Decoupled Music Playback & Semantic Lyric Ledger
 
-## 1. Project Overview
+**Version:** 2.0 · **Target Framework:** .NET 10 (`net10.0`) · **OS:** Windows / Cross-platform
 
-Alify is a music-centric web application built with ASP.NET Core Razor Pages. It integrates with the Spotify API for music playback and the Genius API for fetching song lyrics. The application presents lyrics in an innovative, user-friendly chat format, making it easy to follow along with songs, especially those with multiple artists.
+Alify is a local-first application designed with strict separation of concerns into two independent architectural lanes:
+1. **Official Spotify Observation & Filter Lane (`Alify.Spotify`)**: Observes currently playing tracks, manages playback queues, filters explicit tracks with user opt-in, and broadcasts events over bounded Server-Sent Events (SSE). Uses client-side PKCE OAuth (RFC 7636) with zero stored client secrets.
+2. **Independent Semantic & Lyric Foundation Lane (`Alify.Lyrics` & `Alify.Core`)**: Manages permissioned lyric imports, canonical line normalization, an immutable SQLite ledger, strict evidence validation, deterministic policy recommendations, and append-only reviewer audits.
 
-### Key Technologies
-- **Backend**: C#, ASP.NET Core, .NET 9
-- **Frontend**: Razor Pages, HTML, CSS
-- **APIs**: Spotify API, Genius API
-- **IDE**: Visual Studio
-
----
-
-## 2. Architecture and Communication Flow
-
-The application follows a modern ASP.NET Core architecture that separates concerns into distinct layers, making the codebase modular, scalable, and easy to maintain.
-
-### Core Components
-
-| Component              | Responsibility                                                                                             |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Razor Pages (`.cshtml`)** | The presentation layer (UI). These files render the HTML that the user sees in their browser.              |
-| **Page Models (`.cs`)**    | The backend logic for each Razor Page. They handle user input, orchestrate service calls, and prepare data for the view. |
-| **Services**           | Reusable classes that encapsulate specific business logic, such as interacting with external APIs or parsing data. |
-| **Models**             | Plain C# objects that define the data structures used throughout the application (e.g., `LyricMapping`).     |
-
-### Communication Flow: The Lyrics Chat View Example
-
-Here�s a step-by-step breakdown of how the components interact when a user visits the Lyrics View page:
-
-1.  **HTTP Request**: The user navigates to the `/LyricsView` URL.
-2.  **Page Model (`LyricsViewModel.cs`)**:
-    *   ASP.NET Core routes the request to the `OnGetAsync` method in the `LyricsViewModel`.
-    *   The Page Model calls the `SpotifyService` to get the user's currently playing track.
-    *   It then calls the `LyricService` to fetch the raw lyrics for that track from the Genius API.
-3.  **Lyric Parsing (`ArtistLyricService.cs`)**:
-    *   The Page Model passes the raw lyrics to the `ArtistLyricService`.
-    *   This service uses **regular expressions** to parse the text, identifying song sections (`[Chorus]`) and artist changes (`[Verse 1: Artist]`).
-    *   It transforms the plain string into a structured `LyricMapping` object, where each line is associated with an artist and section.
-4.  **Data Preparation**:
-    *   The Page Model receives the structured `LyricMapping` object.
-    *   It sets this object and the `MainArtist` as public properties, making them accessible to the view.
-5.  **View Rendering (`LyricsView.cshtml`)**:
-    *   The Razor engine renders the HTML. It accesses the `Model.LyricMapping` property.
-    *   It **loops through each lyric line** and dynamically creates chat bubbles.
-    *   **Conditional logic** is used to align bubbles to the right for the `MainArtist` and to the left for others, creating the chat-like appearance.
-    *   Annotations are styled as centered "system messages."
-
-This clean separation ensures that the UI (View) is decoupled from the business logic (Services), making the application robust and easier to debug.
+> [!IMPORTANT]
+> **Strict Decoupling Invariant:** The semantic analysis engine never automates or issues Spotify playback commands, and the Spotify observation lane never ingests or requires third-party lyrics.
 
 ---
 
-## 3. In-Depth Feature Explanation
+## Architecture Overview
 
-### The Lyrics Parsing Engine (`ArtistLyricService`)
-
-This is the core of the lyrics feature.
-
--   **How it works**: It uses a state-machine-like approach. As it iterates through the lyric lines, it keeps track of the `currentArtist` and `currentSection`. When it encounters an annotation like `[Verse 2: Jinu]`, it updates its state, so all subsequent lines are correctly attributed to "Jinu" and "Verse 2".
--   **Why it's important**: This logic allows the application to understand the structure of a song with multiple performers, which is crucial for the chat-style display.
-
-### The Lyrics Chat View (`LyricsView.cshtml`)
-
-This feature provides a unique and intuitive way to read lyrics.
-
--   **Design Rationale**: A traditional block of text can be hard to follow, especially with multiple artists. A chat interface is a familiar paradigm that clearly separates speakers.
--   **Implementation**:
-    *   The view uses the `MainArtist` property from its Page Model to decide the alignment of chat bubbles (`justify-content: flex-end` for the main artist, `flex-start` for others).
-    *   The CSS is self-contained within the `.cshtml` file, making the component easy to understand and modify. The colors (`#056162` for the main artist, `#262d31` for others) are chosen to mimic popular messaging apps.
+```
+                      ┌────────────────────────────────────────┐
+                      │          Local User Interface          │
+                      │   (http://127.0.0.1:5000 & 5001)       │
+                      └───────────────┬────────────────────────┘
+                                      │
+              ┌───────────────────────┴───────────────────────┐
+              │                                               │
+   [Spotify Observation Lane]                     [Semantic & Lyric Lane]
+   - Local PKCE OAuth (RFC 7636)                  - Permissioned Import (Paste/File)
+   - Read-only playback observation               - Immutable SQLite Ledger (WAL mode)
+   - Opt-in explicit metadata filter              - CRLF Normalizer & SHA-256 Hashing
+   - Bounded SSE stream (DropOldest)              - Strict Evidence Validator (Anti-hallucination)
+   - Playback fault & skip attribution            - Offline Heuristics & Consented BYOK Gemini
+   - No lyrics dependency                         - Deterministic Policy Evaluator (Allow/Skip/Abstain)
+                                                  - Append-Only Review Audits
+```
 
 ---
 
-## 4. Setup and Running the Application
+## Core Capabilities
+
+### 1. Trustworthy Spotify Core (`Alify.Spotify`)
+- **Local PKCE Authentication:** Uses RFC 7636 SHA-256 code challenge generation (`PkceUtil.cs`) with least-privilege scopes. Eliminates hardcoded client secrets.
+- **Accurate Skip Attribution:** Typed `SkipActionResult` preserves the original target track identity during playback advancement, eliminating post-dequeue attribution errors (`AUD-003`).
+- **Bounded SSE Broadcasts:** High-concurrency Server-Sent Events backed by `System.Threading.Channels` with bounded queues (`DropOldest` backpressure), preventing memory leaks on slow or dropped connections.
+- **Playback Fault Matrix:** Graceful handling of network timeouts (`OutcomeUnknown`), rejected calls 401/403/429 (`Failed`), and empty queues without index exceptions.
+
+### 2. Independent Semantic Foundation (`Alify.Core`)
+- **Permissioned Import:** Validates rights attestations, strips UTF BOMs, enforces 64KB/128KB payload bounds, and parses section tags (`[Verse]`, `[Chorus]`, `[Bridge]`).
+- **Immutable Source Ledger:** Persists records in SQLite (`alify_ledger.db`) using foreign key cascades, WAL mode, transaction isolation, and serialized write locks.
+- **Exact Evidence Verification:** `EvidenceValidator` verifies that citations match exact 1-based line bounds and canonical text from the ledger, rejecting fabricated model excerpts.
+- **Deterministic Policy:** `DeterministicPolicyEvaluator` computes side-effect-free recommendations (`Allow`, `RecommendSkip`, `Abstain`) against user preferences and reviewer audits.
+- **Consented BYOK Gemini Adapter:** Optional LLM integration requiring explicit user disclosure, transactional daily budget reservations, and error mapping to `Unavailable` or `InvalidOutput`.
+- **Append-Only Review Audits:** Enables users and auditors to dispute or confirm stance findings (`Agree`, `Disagree`, `NeedsContext`, `Unresolved`) with version-conflict protection.
+- **Safe Diagnostics:** `SafeDiagnosticsService` strips Bearer tokens, Gemini API keys, and client secrets from diagnostic reports.
+
+---
+
+## Quick Start & Running Locally
 
 ### Prerequisites
-- .NET 9 SDK
-- API keys for Spotify and Genius.
+- [.NET 10 SDK](https://dotnet.microsoft.com/) (`10.0.100` or newer)
 
-### Configuration
-1.  **Clone the repository.**
-2.  **Generate a Doppler Service Token**:
-    - Navigate to your project in the Doppler dashboard.
-    - Go to the "Access" tab and generate a new read-only Service Token.
-3.  **Configure the Doppler Token**: Store your Service Token using .NET's User Secrets. This is the recommended and most secure method for local development. Run the following command in your project's root directory:
-    ```bash
-    dotnet user-secrets set "DOPPLER_TOKEN" "your_doppler_service_token"
-    ```
-    *Note: The application will fetch all other secrets (like Spotify and Genius keys) directly from your Doppler project. Ensure they are configured correctly in the Doppler UI.*
+### Run Both Services
+Execute the coordinated PowerShell launcher (which validates port availability and binds explicit loopback addresses):
 
-### Running the App
-1.  Open a terminal in the project root.
-2.  Run `dotnet restore` to install dependencies.
-3.  Run `dotnet run` to start the application.
-4.  Navigate to `http://127.0.0.1:7236` in your browser.
-5.  Log in with Spotify to enable all features.
+```powershell
+.\run-all.ps1
+```
+
+Or on Linux / macOS:
+```bash
+chmod +x run-all.sh
+./run-all.sh
+```
+
+- **Alify Lyrics & Semantic UI:** `http://127.0.0.1:5000`
+- **Alify Spotify Dashboard:** `http://127.0.0.1:5001`
 
 ---
 
-## 5. How to Contribute
+## Automated Test Suites
 
-As a new developer, here are the key files to understand:
+The solution features automated unit and fault matrix test suites with 0 compilation warnings and 0 errors:
 
-1.  **`Pages/LyricsView.cshtml`**: For UI and layout changes to the lyrics chat.
-2.  **`Pages/LyricsView.cshtml.cs`**: For the logic that fetches and prepares data for the chat view.
-3.  **`Services/ArtistLyricService.cs`**: For improving the lyric parsing engine.
-4.  **`Program.cs`**: To understand how services are registered and configured at startup.
+```powershell
+dotnet test Alify.sln
+```
 
-By reviewing the comments and structure of these files, you can get a solid understanding of the project's architecture and begin contributing effectively.
+- `tests/Alify.Core.Tests`: Covers RFC 7636 PKCE vectors, canonical normalizer, heuristic stance fixtures, evidence validator, SQLite ledger transactions, policy evaluator, Gemini structured adapter, and safe diagnostics redaction.
+- `tests/Alify.Spotify.Tests`: Covers PKCE token exchange, skip attribution outcomes, bounded SSE channels, and playback fault matrix scenarios.
