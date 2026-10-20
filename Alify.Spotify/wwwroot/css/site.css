@@ -338,6 +338,29 @@ html, body {
   line-height: 1.35;
 }
 
+.filter-select {
+  background-color: #ffffff;
+  border: 1px solid var(--border-light);
+  color: #111111;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 0.65rem;
+  border-radius: 2px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.filter-select:focus {
+  border-color: #111111;
+  outline: none;
+}
+
+.filter-range {
+  width: 100%;
+  accent-color: #111111;
+  cursor: pointer;
+}
+
 /* Footer */
 footer {
   background-color: #ffffff !important;

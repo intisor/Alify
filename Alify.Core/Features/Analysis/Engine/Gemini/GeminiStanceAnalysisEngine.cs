@@ -1,5 +1,6 @@
 using Alify.Core.Features.Analysis.Ledger;
 using Alify.Core.Features.Analysis.Models;
+using Alify.Core.Features.Analysis.Policy;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -34,9 +35,19 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
         _timeout = timeout ?? TimeSpan.FromSeconds(15);
     }
 
-    public async Task<AnalysisResult> AnalyzeAsync(
+    public Task<AnalysisResult> AnalyzeAsync(
         SourceVersion source,
         string? targetLanguage = "en",
+        CancellationToken cancellationToken = default)
+    {
+        return AnalyzeAsync(source, targetLanguage, FilterProfile.General, 5, cancellationToken);
+    }
+
+    public async Task<AnalysisResult> AnalyzeAsync(
+        SourceVersion source,
+        string? targetLanguage,
+        FilterProfile profile,
+        int strictnessLevel,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -79,7 +90,7 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
         }
 
         // 5. Construct structured prompt
-        string prompt = BuildStructuredPrompt(source, lang);
+        string prompt = BuildStructuredPrompt(source, lang, profile, strictnessLevel);
 
         string responseContent;
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -105,11 +116,27 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
         return ParseAndValidateResponse(responseContent, source, lang);
     }
 
-    private static string BuildStructuredPrompt(SourceVersion source, string language)
+    private static string BuildStructuredPrompt(SourceVersion source, string language, FilterProfile profile = FilterProfile.General, int strictnessLevel = 5)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are a neutral lyrical content analysis engine.");
-        sb.AppendLine("Analyze the provided song lyrics line by line for stances on topics: 'violence' and 'substance_use'.");
+        sb.AppendLine("You are an advanced lyrical content analysis engine.");
+        sb.AppendLine($"Worldview Ethos Profile: {profile}. Strictness Level: {strictnessLevel} of 10.");
+        sb.AppendLine("Analyze the provided song lyrics line by line for stances on topics: 'violence', 'substance_use', 'blasphemy', 'sexual_content', 'occult', 'profanity'.");
+        
+        if (profile == FilterProfile.Islamic)
+        {
+            sb.AppendLine("Islamic Ethos Focus: Rigorously examine for Shirk/Blasphemy, Intoxicants/Alcohol (Khamr), Sexual Explicitness/Fahisha, and Violence.");
+        }
+        else if (profile == FilterProfile.Christian)
+        {
+            sb.AppendLine("Christian Ethos Focus: Rigorously examine for Blasphemy/taking the Lord's name in vain, Demonic/Occult glorification, Sexual Immorality, and Violence.");
+        }
+        else if (profile == FilterProfile.FamilyFriendly)
+        {
+            sb.AppendLine("Family-Friendly Focus: Strictly identify vulgarity, sexual references, drug use, and violence.");
+        }
+
+        sb.AppendLine($"Strictness guidance: {strictnessLevel}/10 (1=lenient: only gratuitous glorification flagged; 5=standard; 10=strict zero-tolerance: any mention, storytelling, or ambiguous allusion must be flagged).");
         sb.AppendLine("For each topic present, determine the Stance: 'Endorsed', 'Mentioned', 'Rejected', or 'Ambiguous'.");
         sb.AppendLine("Determine Expression: 'Literal', 'Figurative', or 'Unknown'.");
         sb.AppendLine("CRITICAL RULE: Every finding MUST include verifiable Evidence citations referencing the exact 1-based StartLine, EndLine, and exact QuotedText from the lines below.");

@@ -1,4 +1,5 @@
 using Alify.Core.Features.Analysis.Engine;
+using Alify.Core.Features.Analysis.Engine.Gemini;
 using Alify.Core.Features.Analysis.Ledger;
 using Alify.Core.Features.Analysis.Models;
 using Alify.Core.Features.Analysis.Policy;
@@ -19,6 +20,7 @@ namespace Alify.Features.Spotify.Services
 		private readonly FreeLyricsProviderService? _freeLyricsProvider;
 		private readonly CanonicalLyricNormalizer _normalizer = new();
 		private readonly HeuristicStanceEngine _heuristicEngine = new();
+		private readonly GeminiStanceAnalysisEngine? _geminiEngine;
 		private readonly ILogger<QueueService> _logger;
         private readonly SemaphoreSlim _queueSemaphore = new(1, 1);
 
@@ -27,13 +29,15 @@ namespace Alify.Features.Spotify.Services
             SpotifyRequestCache spotifyRequest, 
             ArtistLyricService artistLyricService, 
             ILogger<QueueService> logger,
-            FreeLyricsProviderService? freeLyricsProvider = null)
+            FreeLyricsProviderService? freeLyricsProvider = null,
+            GeminiStanceAnalysisEngine? geminiEngine = null)
 		{
 			_cache = cache;
 			_spotifyRequest = spotifyRequest;
 			_artistLyricService = artistLyricService;
 			_logger = logger;
             _freeLyricsProvider = freeLyricsProvider;
+            _geminiEngine = geminiEngine;
 		}
 		public async Task<MusicQueue?> GetQueueAsync(string userId, SpotifyClient spotify, FullTrack? knownCurrentTrack = null)
 		{
@@ -213,7 +217,7 @@ namespace Alify.Features.Spotify.Services
 
                     if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(trackName))
                     {
-                        var stanceCacheKey = $"stance_eval_{userId}_{trackId}".ToLowerInvariant();
+                        var stanceCacheKey = $"stance_eval_{userId}_{userPrefs.Profile}_{userPrefs.StrictnessLevel}_{trackId}".ToLowerInvariant();
                         if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
                         {
                             currentTarget.Lyrics = cachedResult.Lyrics;
@@ -251,7 +255,38 @@ namespace Alify.Features.Spotify.Services
                                     var summary = string.Join("; ", policyEval.ReasonCodes);
                                     evaluatedSkipReason = $"Lyrics content policy violation: {summary}";
                                     skipReason = evaluatedSkipReason;
-                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by policy evaluator: {Summary}", trackName, artist, summary);
+                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by heuristic policy evaluator: {Summary}", trackName, artist, summary);
+                                }
+                                else if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
+                                {
+                                    try
+                                    {
+                                        var geminiAnalysis = await _geminiEngine.AnalyzeAsync(
+                                            sourceVersion,
+                                            targetLanguage: "en",
+                                            profile: userPrefs.Profile,
+                                            strictnessLevel: userPrefs.StrictnessLevel);
+
+                                        if (geminiAnalysis.Status == AnalysisStatus.Completed)
+                                        {
+                                            var geminiPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(geminiAnalysis, policyPrefs);
+                                            if (geminiPolicyEval.Decision == PolicyDecision.RecommendSkip)
+                                            {
+                                                evaluatedIsFlagged = true;
+                                                isFlagged = true;
+                                                currentTarget.IsFlagged = true;
+                                                var summary = string.Join("; ", geminiPolicyEval.ReasonCodes);
+                                                evaluatedSkipReason = $"Gemini 2.5 LLM [{userPrefs.Profile} Strictness {userPrefs.StrictnessLevel}/10] violation: {summary}";
+                                                skipReason = evaluatedSkipReason;
+                                                _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by Gemini 2.5 LLM ({Profile}, Strictness {Strictness}/10): {Summary}",
+                                                    trackName, artist, userPrefs.Profile, userPrefs.StrictnessLevel, summary);
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "Gemini 2.5 LLM analysis encountered an error for track {TrackName}. Relying on heuristic outcome.", trackName);
+                                    }
                                 }
                             }
 

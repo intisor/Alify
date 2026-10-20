@@ -165,4 +165,73 @@ public class UserFilterPreferencesTests
         // Verify queue cache was invalidated on preference update
         Assert.False(cache.TryGetValue($"queue_{userId}", out _));
     }
+
+    [Fact]
+    public void IslamicProfile_EnforcesHalalGuardrails_AndStrictnessScale()
+    {
+        // Standard strictness (5)
+        var islamicStandard = new UserFilterPreferences
+        {
+            Profile = FilterProfile.Islamic,
+            StrictnessLevel = 5
+        }.ToPolicyPreferences();
+
+        Assert.True(islamicStandard.ExplicitFilterOptIn);
+        Assert.Contains(Stance.Endorsed, islamicStandard.TriggerStancesByTopic["Blasphemy"]);
+        Assert.DoesNotContain(Stance.Mentioned, islamicStandard.TriggerStancesByTopic["Blasphemy"]);
+        Assert.Contains(Stance.Endorsed, islamicStandard.TriggerStancesByTopic["SubstanceUse"]);
+        Assert.Contains(Stance.Endorsed, islamicStandard.TriggerStancesByTopic["SexualContent"]);
+
+        // Strict mode (level 8)
+        var islamicStrict = new UserFilterPreferences
+        {
+            Profile = FilterProfile.Islamic,
+            StrictnessLevel = 8
+        }.ToPolicyPreferences();
+
+        Assert.Contains(Stance.Mentioned, islamicStrict.TriggerStancesByTopic["Blasphemy"]);
+        Assert.Contains(Stance.Mentioned, islamicStrict.TriggerStancesByTopic["SubstanceUse"]);
+        Assert.Contains(Stance.Mentioned, islamicStrict.TriggerStancesByTopic["SexualContent"]);
+    }
+
+    [Fact]
+    public void ChristianProfile_EnforcesBiblicalGuardrails_AndStrictnessScale()
+    {
+        var christianStandard = new UserFilterPreferences
+        {
+            Profile = FilterProfile.Christian,
+            StrictnessLevel = 4
+        }.ToPolicyPreferences();
+
+        Assert.True(christianStandard.ExplicitFilterOptIn);
+        Assert.Contains(Stance.Endorsed, christianStandard.TriggerStancesByTopic["Blasphemy"]);
+        Assert.Contains(Stance.Endorsed, christianStandard.TriggerStancesByTopic["Occult"]);
+        Assert.DoesNotContain(Stance.Mentioned, christianStandard.TriggerStancesByTopic["Occult"]);
+
+        // High strictness (level 9)
+        var christianStrict = new UserFilterPreferences
+        {
+            Profile = FilterProfile.Christian,
+            StrictnessLevel = 9
+        }.ToPolicyPreferences();
+
+        Assert.Contains(Stance.Mentioned, christianStrict.TriggerStancesByTopic["Blasphemy"]);
+        Assert.Contains(Stance.Mentioned, christianStrict.TriggerStancesByTopic["Occult"]);
+    }
+
+    [Fact]
+    public void FamilyFriendlyProfile_FiltersAllAdultThemes()
+    {
+        var familyPrefs = new UserFilterPreferences
+        {
+            Profile = FilterProfile.FamilyFriendly,
+            StrictnessLevel = 5
+        }.ToPolicyPreferences();
+
+        Assert.True(familyPrefs.ExplicitFilterOptIn);
+        Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["Violence"]);
+        Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["SubstanceUse"]);
+        Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["Vulgarity"]);
+        Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["SexualContent"]);
+    }
 }

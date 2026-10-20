@@ -43,12 +43,23 @@
 <div class="clean-panel mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom">
         <div>
-            <span class="section-label mb-1">Content Filter Settings</span>
+            <span class="section-label mb-1">Content &amp; Worldview Filter Settings</span>
             <div class="text-muted" style="font-size: 0.85rem;">
-                Specify what you want to hear vs what should be automatically skipped during playback.
+                Configure religious, family, or custom ethos filters with 1–10 strictness and Gemini 2.5 LLM semantic scanning.
             </div>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mt-sm-0">
+            <span class="pill pill-blue">@Model.FilterPreferences.Profile Profile</span>
+            <span class="pill pill-green">Strictness: @Model.FilterPreferences.StrictnessLevel / 10</span>
+            @if (Model.FilterPreferences.EnableGeminiLLM)
+            {
+                <span class="pill pill-green">● Gemini 2.5 Active</span>
+            }
+            else
+            {
+                <span class="pill">○ Gemini LLM Off</span>
+            }
+
             @if (Model.FilterPreferences.FilterSpotifyExplicit)
             {
                 <span class="pill pill-red">Explicit: Skip</span>
@@ -57,28 +68,63 @@
             {
                 <span class="pill pill-green">Explicit: Allow</span>
             }
-
-            @if (Model.FilterPreferences.FilterViolenceEndorsed || Model.FilterPreferences.FilterViolenceMentioned)
-            {
-                <span class="pill pill-red">Violence: @(Model.FilterPreferences.FilterViolenceMentioned ? "Strict Skip" : "Skip Endorsed")</span>
-            }
-            else
-            {
-                <span class="pill pill-green">Violence: Allow All</span>
-            }
-
-            @if (Model.FilterPreferences.FilterSubstanceEndorsed || Model.FilterPreferences.FilterSubstanceMentioned)
-            {
-                <span class="pill pill-red">Substances: @(Model.FilterPreferences.FilterSubstanceMentioned ? "Strict Skip" : "Skip Endorsed")</span>
-            }
-            else
-            {
-                <span class="pill pill-green">Substances: Allow All</span>
-            }
         </div>
     </div>
 
     <form method="post" asp-page-handler="SaveFilterPreferences">
+        <!-- Top Row: Worldview Profile, Strictness Scale, and Gemini LLM -->
+        <div class="row g-3 mb-3">
+            <!-- Worldview Profile Dropdown -->
+            <div class="col-md-5">
+                <div class="filter-option-box">
+                    <label class="filter-title mb-1 d-block" for="profileSelect">Worldview / Ethos Profile</label>
+                    <select asp-for="FilterPreferences.Profile" class="filter-select" id="profileSelect">
+                        <option value="General">General Safety (Standard Content Filter)</option>
+                        <option value="Islamic">Islamic Ethos (Halal: Shirk/Blasphemy, Intoxicants, Fahisha/Sexual, Violence)</option>
+                        <option value="Christian">Christian Ethos (Biblical: Blasphemy, Demonic/Occult, Immorality, Violence)</option>
+                        <option value="FamilyFriendly">Family &amp; Child Safe (Zero Vulgarity, Sex, Drugs, Violence)</option>
+                        <option value="Custom">Custom Rules (Manual Toggles Below)</option>
+                    </select>
+                    <p class="filter-desc" style="margin-left: 0; margin-top: 0.5rem;">
+                        Select a guided religious or family-friendly profile to automatically configure topic guardrails.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Strictness Level (1 - 10) -->
+            <div class="col-md-4">
+                <div class="filter-option-box">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="filter-title">Strictness Level (1–10)</span>
+                        <span class="pill pill-blue" id="strictnessVal">@Model.FilterPreferences.StrictnessLevel</span>
+                    </div>
+                    <input type="range" min="1" max="10" asp-for="FilterPreferences.StrictnessLevel" class="filter-range" id="strictnessSlider" oninput="document.getElementById('strictnessVal').textContent = this.value;" />
+                    <div class="d-flex justify-content-between text-muted" style="font-size: 0.7rem; margin-top: 0.25rem;">
+                        <span>1 (Lenient)</span>
+                        <span>5 (Standard)</span>
+                        <span>10 (Zero-Tolerance)</span>
+                    </div>
+                    <p class="filter-desc" style="margin-left: 0; margin-top: 0.4rem;">
+                        Levels 7–10 trigger immediate skips even on historical storytelling or casual mentions.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Gemini 2.5 Flash LLM Verification -->
+            <div class="col-md-3">
+                <div class="filter-option-box">
+                    <label class="filter-checkbox-label">
+                        <input type="checkbox" asp-for="FilterPreferences.EnableGeminiLLM" class="filter-checkbox" />
+                        <span class="filter-title">Gemini 2.5 Flash AI</span>
+                    </label>
+                    <p class="filter-desc" style="margin-left: 0; margin-top: 0.5rem;">
+                        Uses Google Gemini 2.5 Flash LLM for deep semantic contextual evaluation.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Second Row: Fine-Grained Topic Checkboxes -->
         <div class="row g-3 mb-3">
             <!-- Spotify Metadata Explicit -->
             <div class="col-md-4">

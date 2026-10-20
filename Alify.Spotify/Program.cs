@@ -2,6 +2,7 @@ using Alify.Controllers;
 using Alify.Core.Infrastructure.Doppler;
 using Alify.Core.Models;
 using Alify.Core.Services;
+using Alify.Core.Features.Analysis.Engine.Gemini;
 using Alify.Features.Spotify.Events;
 using Alify.Features.Spotify.Services;
 using Alify.Services;
@@ -76,6 +77,20 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<FreeLyricsProviderService>();
 builder.Services.AddSingleton<FreeLyricsProviderService>();
 builder.Services.AddSingleton<Alify.Core.Services.ArtistLyricService>();
+
+// Register Gemini 2.5 Flash LLM engine if API key is present
+var geminiApiKey = builder.Configuration["ApiKeys:Gemini:ApiKey"];
+if (!string.IsNullOrWhiteSpace(geminiApiKey))
+{
+    builder.Services.AddSingleton<IGeminiModelClient>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        return new HttpGeminiModelClient(httpClient, geminiApiKey, "gemini-2.5-flash");
+    });
+    builder.Services.AddSingleton(ProviderConsent.Granted("gemini-2.5-flash"));
+    builder.Services.AddSingleton(new BudgetLedger(200));
+    builder.Services.AddSingleton<GeminiStanceAnalysisEngine>();
+}
 
 // Add SSE and Spotify services
 builder.Services.AddSingleton<QueueService>();
