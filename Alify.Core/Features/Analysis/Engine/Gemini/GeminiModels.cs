@@ -8,13 +8,13 @@ public record ProviderConsent
 {
     public bool IsConsented { get; init; } = false;
     public string ProviderName { get; init; } = "Gemini";
-    public string ModelName { get; init; } = "gemini-1.5-flash";
+    public string ModelName { get; init; } = "gemini-2.5-flash";
     public DateTime? ConsentedAtUtc { get; init; }
     public string ScopeDisclosed { get; init; } =
         "Transmits normalized lyric lines and line numbers outside the local environment for semantic stance classification. " +
         "No Spotify identifiers, tokens, user accounts, or private metadata are included.";
 
-    public static ProviderConsent Granted(string modelName = "gemini-1.5-flash") =>
+    public static ProviderConsent Granted(string modelName = "gemini-2.5-flash") =>
         new()
         {
             IsConsented = true,

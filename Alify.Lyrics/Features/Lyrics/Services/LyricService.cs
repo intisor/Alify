@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -130,10 +130,12 @@ namespace Alify.Services
 
             var providers = new List<(string Provider, string Endpoint, string? ApiKey, string Model)>
             {
-                // Using SDK for Gemini with latest model (gemini-3-flash-preview as of Jan 2025)
-                ("Gemini", "", _apiKeys.Gemini?.ApiKey, "gemini-3-flash-preview"), 
-                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "meta-llama/llama-3.1-8b-instruct"),
-                ("Mistral", "https://api.mistral.ai/v1/chat/moderations", _apiKeys.Mistral?.ApiKey, "mistral-moderation-latest")
+                // Using SDK for Gemini with latest Gemini 2.5 model
+                ("Gemini", "", _apiKeys.Gemini?.ApiKey, "gemini-2.5-flash"), 
+                // Using OpenRouter zero-cost auto-router for free tier fallback
+                ("OpenRouter", "https://openrouter.ai/api/v1/chat/completions", _apiKeys.OpenRouter?.ApiKey, "openrouter/free"),
+                // Official Mistral content moderation endpoint
+                ("Mistral", "https://api.mistral.ai/v1/moderations", _apiKeys.Mistral?.ApiKey, "mistral-moderation-latest")
             };
 
             foreach (var (provider, endpoint, providerApiKey, model) in providers)

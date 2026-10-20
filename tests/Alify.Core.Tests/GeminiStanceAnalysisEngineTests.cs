@@ -9,7 +9,7 @@ public class GeminiStanceAnalysisEngineTests
 {
     private class FakeGeminiClient : IGeminiModelClient
     {
-        public string ModelName { get; init; } = "gemini-1.5-flash";
+        public string ModelName { get; init; } = "gemini-2.5-flash";
         public Func<string, Task<string>> ResponseProvider { get; set; } = _ => Task.FromResult("{}");
         public int CallCount { get; private set; }
 
