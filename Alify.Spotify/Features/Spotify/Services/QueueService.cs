@@ -34,7 +34,7 @@ namespace Alify.Features.Spotify.Services
 			_logger = logger;
             _freeLyricsProvider = freeLyricsProvider;
 		}
-		public async Task<MusicQueue?> GetQueueAsync(string userId,SpotifyClient spotify)
+		public async Task<MusicQueue?> GetQueueAsync(string userId, SpotifyClient spotify, FullTrack? knownCurrentTrack = null)
 		{
 			_cache.Set("SpotifyUserId", userId);
 			var cacheKey = $"queue_{userId}";
@@ -42,20 +42,26 @@ namespace Alify.Features.Spotify.Services
 			if (_cache.TryGetValue(cacheKey, out MusicQueue? cachedQueue) && cachedQueue != null && !cachedQueue.IsExpired)
 				return cachedQueue;
 
-			var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify, userId);
-			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify, userId);
+			FullTrack? currentTrack = knownCurrentTrack;
+			if (currentTrack == null)
+			{
+				var currentlyPlaying = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify, userId);
+				currentTrack = currentlyPlaying?.Item as FullTrack;
+			}
 
-			if (currentlyPlaying is null || queueResponse is null || 
-                currentlyPlaying.Item is not FullTrack currentTrack || 
-                queueResponse.Queue is null)
-            {
-                return null;
-            }
+			if (currentTrack == null)
+			{
+				return null;
+			}
+
+			var queueResponse = await _spotifyRequest.GetQueueAsync(spotify, userId);
+			if (queueResponse?.Queue is null)
+			{
+				return null;
+			}
 
 			var queue = queueResponse.Queue;
-
-            var newQueue = new MusicQueue();
-
+			var newQueue = new MusicQueue();
 			newQueue.Tracks.Add(BuildTrack(currentTrack));
 
 			foreach (var item in queue.Take(9))
@@ -81,15 +87,45 @@ namespace Alify.Features.Spotify.Services
 				MappedLyrics = null
 			};
 		}
-		public async Task<bool> ValidateQueueAsync(string userId, SpotifyClient spotify)
+
+		/// <summary>
+		/// Validates the cached queue against a known current track ID purely in memory with zero HTTP calls.
+		/// </summary>
+		public bool ValidateQueue(string userId, string currentTrackId)
 		{
-			var queue = await GetQueueAsync(userId, spotify);
-			if (queue == null || queue.IsEmpty)
+			var cacheKey = $"queue_{userId}";
+			if (_cache.TryGetValue(cacheKey, out MusicQueue? cachedQueue) && cachedQueue != null && !cachedQueue.IsExpired)
 			{
-				_logger.LogWarning("Queue for user {UserId} is empty or null.", userId);
-				return false;
+				var isValid = cachedQueue.MatchesCurrentPlayback(currentTrackId);
+				if (!isValid)
+				{
+					_logger.LogInformation("Queue out of sync with track {TrackId} - invalidating cache", currentTrackId);
+					InvalidateQueue(userId);
+				}
+				return isValid;
 			}
-			var currentPlaybackResponse = await spotify.Player.GetCurrentPlayback();
+			return false;
+		}
+
+		public async Task<bool> ValidateQueueAsync(string userId, SpotifyClient spotify, string? knownCurrentTrackId = null)
+		{
+			if (!string.IsNullOrEmpty(knownCurrentTrackId))
+			{
+				return ValidateQueue(userId, knownCurrentTrackId);
+			}
+
+			var cacheKey = $"queue_{userId}";
+			if (!_cache.TryGetValue(cacheKey, out MusicQueue? queue) || queue == null || queue.IsEmpty || queue.IsExpired)
+			{
+				queue = await GetQueueAsync(userId, spotify);
+				if (queue == null || queue.IsEmpty)
+				{
+					_logger.LogWarning("Queue for user {UserId} is empty or null.", userId);
+					return false;
+				}
+			}
+
+			var currentPlaybackResponse = await _spotifyRequest.GetCurrentlyPlayingAsync(spotify, userId);
 			if (currentPlaybackResponse?.Item is not FullTrack currentTrack) return false;
 
 			var isValid = queue.MatchesCurrentPlayback(currentTrack.Id);
@@ -101,16 +137,19 @@ namespace Alify.Features.Spotify.Services
 
 			return isValid;
 		}
+
 		public void InvalidateQueue(string userId)
 		{
 			var cacheKey = $"queue_{userId}";
 			_cache.Remove(cacheKey);
 		}
+
 		public async Task<Track?> GetTrackFromQueueAsync(string userId, string trackId, SpotifyClient spotify)
 		{
 			var queue = await GetQueueAsync(userId, spotify);
 			return queue?.Tracks.FirstOrDefault(t => t.FullTrack?.Id == trackId);
 		}
+
         public async Task<SkipActionResult> SkipFlaggedSongsAsync(string userId, SpotifyClient spotify)
         {
             await _queueSemaphore.WaitAsync();
@@ -135,41 +174,67 @@ namespace Alify.Features.Spotify.Services
                     skipReason = "Official Spotify explicit metadata";
                 }
 
-                // 2. Automated open lyrics retrieval and heuristic stance evaluation
+                // 2. Automated open lyrics retrieval and heuristic stance evaluation with 12-hour evaluation cache
                 if (!isFlagged && _freeLyricsProvider != null && currentTarget.FullTrack != null)
                 {
                     var artist = currentTarget.FullTrack.Artists?.FirstOrDefault()?.Name;
                     var trackName = currentTarget.FullTrack.Name;
+                    var trackId = currentTarget.FullTrack.Id ?? $"{artist}_{trackName}";
 
                     if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(trackName))
                     {
-                        var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
-                        if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
+                        var stanceCacheKey = $"stance_eval_{trackId}".ToLowerInvariant();
+                        if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
                         {
-                            lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);
-                            _cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));
-                        }
-
-                        currentTarget.Lyrics = lyrics;
-
-                        if (!string.IsNullOrWhiteSpace(lyrics))
-                        {
-                            var sourceVersion = _normalizer.Normalize(lyrics, sourceId: currentTarget.FullTrack.Id);
-                            var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
-
-                            var triggers = analysis.Findings
-                                .Where(f => (f.Topic == "Violence" || f.Topic == "SubstanceUse") &&
-                                            (f.Stance == Stance.Endorsed || f.Stance == Stance.Mentioned))
-                                .ToList();
-
-                            if (triggers.Count > 0)
+                            currentTarget.Lyrics = cachedResult.Lyrics;
+                            if (cachedResult.IsFlagged)
                             {
                                 isFlagged = true;
                                 currentTarget.IsFlagged = true;
-                                var summary = string.Join("; ", triggers.Select(t => $"{t.Topic}: {t.Stance} ({t.Evidence.Count} lines)"));
-                                skipReason = $"Lyrics content policy violation: {summary}";
-                                _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by lyrics analysis: {Summary}", trackName, artist, summary);
+                                skipReason = cachedResult.SkipReason;
                             }
+                        }
+                        else
+                        {
+                            var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
+                            if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
+                            {
+                                lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);
+                                _cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));
+                            }
+
+                            currentTarget.Lyrics = lyrics;
+                            bool evaluatedIsFlagged = false;
+                            string evaluatedSkipReason = string.Empty;
+
+                            if (!string.IsNullOrWhiteSpace(lyrics))
+                            {
+                                var sourceVersion = _normalizer.Normalize(lyrics, sourceId: currentTarget.FullTrack.Id);
+                                var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+
+                                var triggers = analysis.Findings
+                                    .Where(f => (f.Topic == "Violence" || f.Topic == "SubstanceUse") &&
+                                                (f.Stance == Stance.Endorsed || f.Stance == Stance.Mentioned))
+                                    .ToList();
+
+                                if (triggers.Count > 0)
+                                {
+                                    evaluatedIsFlagged = true;
+                                    isFlagged = true;
+                                    currentTarget.IsFlagged = true;
+                                    var summary = string.Join("; ", triggers.Select(t => $"{t.Topic}: {t.Stance} ({t.Evidence.Count} lines)"));
+                                    evaluatedSkipReason = $"Lyrics content policy violation: {summary}";
+                                    skipReason = evaluatedSkipReason;
+                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by lyrics analysis: {Summary}", trackName, artist, summary);
+                                }
+                            }
+
+                            _cache.Set(stanceCacheKey, new StanceEvaluationResult
+                            {
+                                IsFlagged = evaluatedIsFlagged,
+                                SkipReason = evaluatedSkipReason,
+                                Lyrics = lyrics
+                            }, TimeSpan.FromHours(12));
                         }
                     }
                 }
@@ -266,5 +331,12 @@ namespace Alify.Features.Spotify.Services
 
 			return newQueue;
         }
+    }
+
+    public sealed record StanceEvaluationResult
+    {
+        public bool IsFlagged { get; init; }
+        public string SkipReason { get; init; } = string.Empty;
+        public string? Lyrics { get; init; }
     }
 }

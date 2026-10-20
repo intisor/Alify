@@ -71,24 +71,24 @@ namespace Alify.Pages
                 var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                 var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
 
+                var currentlyPlayingResponse = await this.WithServiceAsync<SpotifyRequestCache, CurrentlyPlaying?>(
+                    async requestCache => await requestCache.GetCurrentlyPlayingAsync(spotify));
+                var currentTrack = currentlyPlayingResponse?.Item as FullTrack;
+                var currentTrackId = currentTrack?.Id;
+
                 await this.WithServiceAsync<IMemoryCache>(async cache =>
                 {
-                    await this.WithServiceAsync<SpotifyRequestCache>(async requestCache =>
+                    var lastTrackId = cache.Get<string>("LastTrackId");
+                    if (currentTrackId != null && currentTrackId != lastTrackId)
                     {
-                        var currentlyPlayingResponse = await requestCache.GetCurrentlyPlayingAsync(spotify);
-                        var currentTrackId = (currentlyPlayingResponse?.Item as FullTrack)?.Id;
-                        var lastTrackId = cache.Get<string>("LastTrackId");
-
-                        if (currentTrackId != null && currentTrackId != lastTrackId)
-                        {
-                            
-                            cache.Set("LastTrackId", currentTrackId, TimeSpan.FromMinutes(10));
-                            _queueService.InvalidateQueue(userId);
-                            _logger.LogInformation("Track changed, refreshed playback info: {TrackId}", currentTrackId);
-                        }
-                    });
+                        cache.Set("LastTrackId", currentTrackId, TimeSpan.FromMinutes(10));
+                        _queueService.InvalidateQueue(userId);
+                        _logger.LogInformation("Track changed, refreshed playback info: {TrackId}", currentTrackId);
+                    }
+                    await Task.CompletedTask;
                 });
-                Queue = await _queueService.GetQueueAsync(userId, spotify);
+
+                Queue = await _queueService.GetQueueAsync(userId, spotify, currentTrack);
                 if (Queue != null)
                 {
                     _logger.LogInformation("Queue for user {UserId}: {@QueueTracks}", userId, Queue.Tracks.Select(t => new { Name = t.FullTrack?.Name ?? "Unknown", Id = t.FullTrack?.Id ?? "Unknown" }));
@@ -99,9 +99,6 @@ namespace Alify.Pages
                     }
                     else
                     {
-                        var currentlyPlayingResponse = await this.WithServiceAsync<SpotifyRequestCache, CurrentlyPlaying?>(async requestCache =>
-                        await requestCache.GetCurrentlyPlayingAsync(spotify));
-
                         PlaybackInfo = new SpotifyPlaybackInfo
                         {
                             CurrentlyPlaying = Queue.CurrentTrack,
@@ -281,7 +278,7 @@ namespace Alify.Pages
                 {
                     _logger.LogInformation("Current track changed, validating queue");
 
-                    var isValid = await _queueService.ValidateQueueAsync(userId, spotify);
+                    var isValid = await _queueService.ValidateQueueAsync(userId, spotify, currentTrack.Id);
                     if (!isValid)
                     {
                         _queueService.InvalidateQueue(userId);

@@ -328,14 +328,20 @@ public class SpotifyService
         var currentlyPlayingResponse = await _requestCache.GetCurrentlyPlayingAsync(spotify, userId);
         if (currentlyPlayingResponse?.Item is not FullTrack currentTrack) return null;
 
-        var isQueueValid = await _queueService.ValidateQueueAsync(userId, spotify);
-        if (!isQueueValid)
+        // In-memory queue validation against known current track ID (zero extra network calls if cached)
+        bool isQueueValid = _queueService.ValidateQueue(userId, currentTrack.Id);
+        MusicQueue? queue = null;
+
+        if (isQueueValid)
         {
-            Log.Logger.Warning("SpotifyService: Queue validation failed for user {UserId}. Rebuilding queue.", userId);
-            _queueService.InvalidateQueue(userId);
+            _cache.TryGetValue($"queue_{userId}", out queue);
         }
 
-        var queue = await _queueService.GetQueueAsync(userId, spotify);
+        if (queue == null || queue.IsEmpty || queue.IsExpired)
+        {
+            queue = await _queueService.GetQueueAsync(userId, spotify, currentTrack);
+        }
+
         if (queue == null || queue.IsEmpty) return null;
         var playbackInfo = new SpotifyPlaybackInfo
         {
