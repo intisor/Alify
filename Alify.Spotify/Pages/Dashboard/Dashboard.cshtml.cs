@@ -11,6 +11,7 @@ using Alify.Features.Spotify.Services;
 using System.Threading.Tasks;
 using System.Linq;
 using Alify.Core.Extensions;
+using Alify.Core.Features.Analysis.Policy;
 
 namespace Alify.Pages
 {
@@ -43,6 +44,9 @@ namespace Alify.Pages
         public bool IsMonitoring { get; set; }
         public PrivateUser? CurrentUser { get; set; }
 
+        [BindProperty]
+        public UserFilterPreferences FilterPreferences { get; set; } = new();
+
         public async Task<IActionResult> OnGetAsync()
         {
             if (!_spotifyService.IsAuthenticated())
@@ -68,6 +72,9 @@ namespace Alify.Pages
                     StatusMessage = "Could not load Spotify profile. Please click Refresh Queue.";
                     return Page();
                 }
+
+                FilterPreferences = _queueService.GetUserFilterPreferences(userId);
+
                 var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                 var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
 
@@ -414,6 +421,47 @@ namespace Alify.Pages
             {
                 HighPerformanceLogging.LogMonitoringError(_logger, ex, "AnalyzeLyrics");
                 StatusMessage = "Error analyzing lyrics. Please try again.";
+            }
+
+            await OnGetAsync();
+            return Page();
+        }
+
+        public async Task<IActionResult> OnPostSaveFilterPreferencesAsync()
+        {
+            if (!_spotifyService.IsAuthenticated())
+            {
+                StatusMessage = "Authentication required. Please login to Spotify first.";
+                _logger.LogWarning("Save filter preferences attempted without authentication");
+                return RedirectToPage("/Index");
+            }
+
+            var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                StatusMessage = "Authentication required. Please login to Spotify first.";
+                return RedirectToPage("/Index");
+            }
+
+            try
+            {
+                CurrentUser = await _spotifyService.CurrentUserAsync();
+                string? userId = CurrentUser?.Id ?? _httpContextAccessor.HttpContext?.Session.GetString("SpotifyUserId");
+                if (string.IsNullOrEmpty(userId))
+                {
+                    StatusMessage = "Authentication required to update filter preferences.";
+                    _logger.LogWarning("Save filter preferences attempted without valid user ID");
+                    return Page();
+                }
+
+                _queueService.SaveUserFilterPreferences(userId, FilterPreferences);
+                StatusMessage = "Filter preferences saved successfully.";
+                _logger.LogInformation("Saved filter preferences for user {UserId}", userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving filter preferences");
+                StatusMessage = "Error saving filter preferences. Please try again.";
             }
 
             await OnGetAsync();

@@ -1,6 +1,7 @@
 using Alify.Core.Features.Analysis.Engine;
 using Alify.Core.Features.Analysis.Ledger;
 using Alify.Core.Features.Analysis.Models;
+using Alify.Core.Features.Analysis.Policy;
 using Alify.Core.Models;
 using Alify.Core.Services;
 using Alify.Services;
@@ -60,15 +61,16 @@ namespace Alify.Features.Spotify.Services
 				return null;
 			}
 
+			var userPrefs = GetUserFilterPreferences(userId);
 			var queue = queueResponse.Queue;
 			var newQueue = new MusicQueue();
-			newQueue.Tracks.Add(BuildTrack(currentTrack));
+			newQueue.Tracks.Add(BuildTrack(currentTrack, userPrefs));
 
 			foreach (var item in queue.Take(9))
 			{
 				if (item is FullTrack track)
 				{
-					newQueue.EnqueueTrack(BuildTrack(track));
+					newQueue.EnqueueTrack(BuildTrack(track, userPrefs));
 				}
 			}
 			_cache.Set(cacheKey, newQueue, TimeSpan.FromSeconds(30));
@@ -77,15 +79,36 @@ namespace Alify.Features.Spotify.Services
 			return newQueue;
 		}
 
-		private static Track BuildTrack(FullTrack track)
+		private static Track BuildTrack(FullTrack track, UserFilterPreferences? prefs = null)
 		{
+			bool isExplicitFlagged = (prefs == null || prefs.FilterSpotifyExplicit) && track.Explicit;
 			return new Track
 			{
 				FullTrack = track,
-				IsFlagged = track.Explicit,
+				IsFlagged = isExplicitFlagged,
 				Lyrics = null,
 				MappedLyrics = null
 			};
+		}
+
+		public UserFilterPreferences GetUserFilterPreferences(string userId)
+		{
+			var prefsKey = $"policy_prefs_{userId}";
+			if (_cache.TryGetValue(prefsKey, out UserFilterPreferences? prefs) && prefs != null)
+			{
+				return prefs;
+			}
+			return new UserFilterPreferences();
+		}
+
+		public void SaveUserFilterPreferences(string userId, UserFilterPreferences preferences)
+		{
+			ArgumentNullException.ThrowIfNull(preferences);
+			var prefsKey = $"policy_prefs_{userId}";
+			_cache.Set(prefsKey, preferences, TimeSpan.FromDays(30));
+			InvalidateQueue(userId);
+			_logger.LogInformation("Saved filter preferences for user {UserId}: Explicit={Explicit}, ViolenceEndorsed={VEnd}, ViolenceMentioned={VMen}, SubstanceEndorsed={SEnd}, SubstanceMentioned={SMen}",
+				userId, preferences.FilterSpotifyExplicit, preferences.FilterViolenceEndorsed, preferences.FilterViolenceMentioned, preferences.FilterSubstanceEndorsed, preferences.FilterSubstanceMentioned);
 		}
 
 		/// <summary>
@@ -162,19 +185,26 @@ namespace Alify.Features.Spotify.Services
                     return SkipActionResult.NoAction(null, "Queue is empty or no current track");
                 }
 
+                var userPrefs = GetUserFilterPreferences(userId);
+                var policyPrefs = userPrefs.ToPolicyPreferences();
+
                 var currentTarget = queue.CurrentTrack;
                 string skipReason = string.Empty;
                 bool isFlagged = currentTarget.IsFlagged;
 
-                // 1. Check official Spotify explicit metadata flag
-                if (!isFlagged && currentTarget.FullTrack?.Explicit == true)
+                // 1. Check official Spotify explicit metadata flag using deterministic policy evaluator
+                if (!isFlagged && currentTarget.FullTrack != null)
                 {
-                    isFlagged = true;
-                    currentTarget.IsFlagged = true;
-                    skipReason = "Official Spotify explicit metadata";
+                    var explicitEval = DeterministicPolicyEvaluator.EvaluateSpotifyExplicit(currentTarget.FullTrack.Explicit, policyPrefs);
+                    if (explicitEval.Decision == PolicyDecision.RecommendSkip)
+                    {
+                        isFlagged = true;
+                        currentTarget.IsFlagged = true;
+                        skipReason = "Official Spotify explicit metadata";
+                    }
                 }
 
-                // 2. Automated open lyrics retrieval and heuristic stance evaluation with 12-hour evaluation cache
+                // 2. Automated open lyrics retrieval and heuristic stance evaluation with user policy evaluation
                 if (!isFlagged && _freeLyricsProvider != null && currentTarget.FullTrack != null)
                 {
                     var artist = currentTarget.FullTrack.Artists?.FirstOrDefault()?.Name;
@@ -183,7 +213,7 @@ namespace Alify.Features.Spotify.Services
 
                     if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(trackName))
                     {
-                        var stanceCacheKey = $"stance_eval_{trackId}".ToLowerInvariant();
+                        var stanceCacheKey = $"stance_eval_{userId}_{trackId}".ToLowerInvariant();
                         if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
                         {
                             currentTarget.Lyrics = cachedResult.Lyrics;
@@ -212,20 +242,16 @@ namespace Alify.Features.Spotify.Services
                                 var sourceVersion = _normalizer.Normalize(lyrics, sourceId: currentTarget.FullTrack.Id);
                                 var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
 
-                                var triggers = analysis.Findings
-                                    .Where(f => (f.Topic == "Violence" || f.Topic == "SubstanceUse") &&
-                                                (f.Stance == Stance.Endorsed || f.Stance == Stance.Mentioned))
-                                    .ToList();
-
-                                if (triggers.Count > 0)
+                                var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);
+                                if (policyEval.Decision == PolicyDecision.RecommendSkip)
                                 {
                                     evaluatedIsFlagged = true;
                                     isFlagged = true;
                                     currentTarget.IsFlagged = true;
-                                    var summary = string.Join("; ", triggers.Select(t => $"{t.Topic}: {t.Stance} ({t.Evidence.Count} lines)"));
+                                    var summary = string.Join("; ", policyEval.ReasonCodes);
                                     evaluatedSkipReason = $"Lyrics content policy violation: {summary}";
                                     skipReason = evaluatedSkipReason;
-                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by lyrics analysis: {Summary}", trackName, artist, summary);
+                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by policy evaluator: {Summary}", trackName, artist, summary);
                                 }
                             }
 
