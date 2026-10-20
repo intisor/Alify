@@ -24,6 +24,65 @@ public class FreeLyricsAndQueueIntegrationTests
     }
 
     [Fact]
+    public void SanitizeTrackTitle_StripsFeaturesAndSpotifyNoise()
+    {
+        Assert.Equal("Cast", FreeLyricsProviderService.SanitizeTrackTitle("Cast (feat. ODUMODUBLVCK)"));
+        Assert.Equal("Calm Down", FreeLyricsProviderService.SanitizeTrackTitle("Calm Down (with Selena Gomez)"));
+        Assert.Equal("Unavailable", FreeLyricsProviderService.SanitizeTrackTitle("Unavailable [feat. Musa Keys] (Explicit)"));
+        Assert.Equal("Essence", FreeLyricsProviderService.SanitizeTrackTitle("Essence - Remastered 2024"));
+        Assert.Equal("Bohemian Rhapsody", FreeLyricsProviderService.SanitizeTrackTitle("Bohemian Rhapsody - Live"));
+    }
+
+    [Fact]
+    public void SanitizeArtistName_ExtractsPrimaryArtist()
+    {
+        Assert.Equal("Shallipopi", FreeLyricsProviderService.SanitizeArtistName("Shallipopi feat. ODUMODUBLVCK"));
+        Assert.Equal("Rema", FreeLyricsProviderService.SanitizeArtistName("Rema & Selena Gomez"));
+        Assert.Equal("Wizkid", FreeLyricsProviderService.SanitizeArtistName("Wizkid, Tems"));
+    }
+
+    [Fact]
+    public void ParseGeniusLyricsFromHtml_StripsAdsAndStitchesMultiContainers()
+    {
+        var sampleHtml = """
+            <html>
+            <body>
+              <div id="lyrics-root">
+                <div data-lyrics-container="true" class="Lyrics__Container">
+                  <div data-exclude-from-selection="true" class="LyricsHeader">
+                    <button>3 Contributors</button>
+                    <span>Gbese Lyrics</span>
+                  </div>
+                  [Verse 1]<br/>
+                  E ra moto one fifty thousand<br/>
+                  Tonight, I'm ready to rock
+                </div>
+                <div class="inread-ad-wrapper" data-exclude-from-selection="true">
+                  <div id="ad-slot-1">Special Discount Ad!</div>
+                </div>
+                <div data-lyrics-container="true" class="Lyrics__Container">
+                </div>
+                <div data-lyrics-container="true" class="Lyrics__Container">
+                  [Chorus]<br/>
+                  Gbese, gbese, gbe s'oke<br/>
+                  Fa pala Jo guara guara oo
+                </div>
+              </div>
+            </body>
+            </html>
+            """;
+
+        var parsed = FreeLyricsProviderService.ParseGeniusLyricsFromHtml(sampleHtml);
+
+        Assert.Contains("[Verse 1]", parsed);
+        Assert.Contains("E ra moto one fifty thousand", parsed);
+        Assert.Contains("[Chorus]", parsed);
+        Assert.Contains("Gbese, gbese, gbe s'oke", parsed);
+        Assert.DoesNotContain("3 Contributors", parsed);
+        Assert.DoesNotContain("Special Discount Ad!", parsed);
+    }
+
+    [Fact]
     public async Task FreeLyricsProvider_ParsesPlainLyricsFromLrclib()
     {
         var sampleResponse = new
@@ -91,11 +150,85 @@ public class FreeLyricsAndQueueIntegrationTests
     }
 
     [Fact]
-    public async Task FreeLyricsProvider_FallsBackToLyricsOvhWhenLrclibReturns404()
+    public async Task FreeLyricsProvider_FallsBackToGeniusWhenLrclibReturns404()
     {
+        var sampleGeniusSearch = new
+        {
+            response = new
+            {
+                sections = new[]
+                {
+                    new
+                    {
+                        type = "song",
+                        hits = new[]
+                        {
+                            new
+                            {
+                                result = new
+                                {
+                                    url = "https://genius.com/Qdot-alagbe-gbese-lyrics"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var geniusPageHtml = """
+            <html>
+            <body>
+              <div data-lyrics-container="true">
+                <div data-exclude-from-selection="true">Ad</div>
+                [Verse 1]<br/>
+                Gbese lori ijo
+              </div>
+            </body>
+            </html>
+            """;
+
         var handler = new FakeHttpMessageHandler(req =>
         {
             if (req.RequestUri!.Host == "lrclib.net")
+            {
+                return new HttpResponseMessage { StatusCode = HttpStatusCode.NotFound };
+            }
+            if (req.RequestUri!.Host == "genius.com" && req.RequestUri.AbsolutePath.Contains("/api/search"))
+            {
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(JsonSerializer.Serialize(sampleGeniusSearch))
+                };
+            }
+            if (req.RequestUri!.Host == "genius.com" && req.RequestUri.AbsolutePath.Contains("gbese-lyrics"))
+            {
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(geniusPageHtml)
+                };
+            }
+            return new HttpResponseMessage { StatusCode = HttpStatusCode.NotFound };
+        });
+
+        var httpClient = new HttpClient(handler);
+        var service = new FreeLyricsProviderService(httpClient, NullLogger<FreeLyricsProviderService>.Instance);
+
+        var lyrics = await service.GetLyricsAsync("Qdot", "Gbese");
+
+        Assert.Contains("[Verse 1]", lyrics);
+        Assert.Contains("Gbese lori ijo", lyrics);
+        Assert.DoesNotContain("Ad", lyrics);
+    }
+
+    [Fact]
+    public async Task FreeLyricsProvider_FallsBackToLyricsOvhWhenAllElseFails()
+    {
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            if (req.RequestUri!.Host == "lrclib.net" || req.RequestUri!.Host == "genius.com")
             {
                 return new HttpResponseMessage { StatusCode = HttpStatusCode.NotFound };
             }
