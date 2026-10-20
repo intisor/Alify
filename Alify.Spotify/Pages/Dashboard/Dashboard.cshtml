@@ -1,107 +1,197 @@
-﻿@page
+@page
 @model Alify.Pages.DashboardModel
 @using SpotifyAPI.Web
+@{
+    ViewData["Title"] = "Music Dashboard";
+}
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="lg:col-span-2">
-        <h2 class="text-2xl font-bold mb-4">Now Playing</h2>
+<!-- Top Control & Status Bar -->
+<div class="control-bar mt-3">
+    <div class="d-flex align-items-center gap-3">
+        <span class="section-label mb-0">Monitor Status:</span>
+        @if (Model.IsMonitoring)
+        {
+            <span class="pill pill-green">● Active</span>
+        }
+        else
+        {
+            <span class="pill">○ Inactive</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <span class="text-muted" style="font-size: 0.85rem;">@Model.StatusMessage</span>
+        }
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <form method="post" class="d-inline">
+            @if (Model.IsMonitoring)
+            {
+                <button type="submit" asp-page-handler="StopMonitor" class="btn-flat btn-flat-danger">Stop Monitoring</button>
+            }
+            else
+            {
+                <button type="submit" asp-page-handler="StartMonitor" class="btn-flat">Start Monitoring</button>
+            }
+        </form>
+        <form method="post" class="d-inline">
+            <button type="submit" asp-page-handler="RefreshData" class="btn-flat btn-flat-secondary">Refresh Queue</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Now Playing & Lyrics -->
+    <div class="col-lg-6">
+        <span class="section-label">Currently Playing</span>
+        
         @if (Model.PlaybackInfo?.CurrentlyPlaying?.FullTrack != null)
         {
             var track = Model.PlaybackInfo.CurrentlyPlaying;
-            <div class="rounded-lg shadow bg-white mb-6 p-6" id="nowPlaying">
-                <div class="flex flex-col md:flex-row md:items-start gap-6">
-                    @if (!string.IsNullOrWhiteSpace(track.FullTrack.Album.Images.FirstOrDefault()?.Url))
+            var fullTrack = track.FullTrack;
+            var albumImg = fullTrack.Album?.Images?.FirstOrDefault()?.Url;
+
+            <div class="clean-panel">
+                <div class="now-playing-wrap">
+                    @if (!string.IsNullOrWhiteSpace(albumImg))
                     {
-                        <img src="@track.FullTrack.Album.Images.FirstOrDefault()?.Url" width="200" class="mb-3 rounded shadow mx-auto md:mx-0" />
+                        <img src="@albumImg" alt="Album Cover" class="now-playing-cover" />
                     }
-                    <div class="flex-grow text-center md:text-left">
-                        <h5 class="text-2xl font-semibold mb-1" id="trackName">@track.FullTrack.Name</h5>
-                        <p class="text-gray-700 mb-4 text-lg" id="trackArtist">by @track.FullTrack.Artists.FirstOrDefault()?.Name</p>
-                        <div class="flex flex-wrap gap-2 mb-4 justify-center md:justify-start">
+                    <div class="now-playing-info">
+                        <h2 class="now-playing-title" id="trackName">@fullTrack.Name</h2>
+                        <p class="now-playing-artist" id="trackArtist">
+                            @string.Join(", ", fullTrack.Artists.Select(a => a.Name))
+                        </p>
+
+                        <div class="d-flex flex-wrap gap-2 mb-3">
                             @if (track.IsFlagged)
                             {
-                                <span class="px-2 py-1 rounded bg-yellow-200 text-yellow-900 text-sm font-medium">⚠️ Flagged</span>
+                                <span class="pill pill-red">Flagged</span>
                             }
                             else
                             {
-                                <span class="px-2 py-1 rounded bg-green-200 text-green-900 text-sm font-medium">✓ Clean</span>
+                                <span class="pill pill-green">Clean</span>
                             }
-                            @if (track.FullTrack.Explicit)
+
+                            @if (fullTrack.Explicit)
                             {
-                                <span class="px-2 py-1 rounded bg-red-200 text-red-900 text-sm font-medium">Explicit</span>
+                                <span class="pill pill-red">Explicit</span>
                             }
+
                             @if (!string.IsNullOrWhiteSpace(track.Lyrics))
                             {
-                                <span class="px-2 py-1 rounded bg-blue-200 text-blue-900 text-sm font-medium">Has Lyrics</span>
+                                <span class="pill pill-blue">Lyrics Available</span>
                             }
                             else
                             {
-                                <span class="px-2 py-1 rounded bg-gray-200 text-gray-700 text-sm font-medium">No Lyrics</span>
+                                <span class="pill">No Lyrics</span>
                             }
                         </div>
+
+                        @if (fullTrack.DurationMs > 0)
+                        {
+                            var duration = TimeSpan.FromMilliseconds(fullTrack.DurationMs);
+                            <div class="text-muted" style="font-size: 0.8rem;">
+                                Duration: @duration.Minutes:@duration.Seconds.ToString("D2")
+                            </div>
+                        }
                     </div>
                 </div>
+
+                <!-- Lyrics Panel -->
+                @if (!string.IsNullOrWhiteSpace(track.Lyrics))
+                {
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="section-label mb-0">Lyrics</span>
+                            <form method="post" class="d-inline">
+                                <button type="submit" asp-page-handler="AnalyzeLyrics" class="btn-flat btn-flat-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Analyze Stanza</button>
+                            </form>
+                        </div>
+                        <div class="lyrics-preview">@track.Lyrics</div>
+                    </div>
+                }
             </div>
         }
         else
         {
-            <div class="rounded-lg shadow bg-white mb-6 p-6 flex flex-col items-center justify-center h-64">
-                <p class="text-gray-500">Nothing is currently playing.</p>
+            <div class="empty-box">
+                <p class="mb-0">Nothing is currently playing on Spotify.</p>
             </div>
         }
     </div>
-    <div>
-        <h2 class="text-2xl font-bold mb-4">Up Next</h2>
+
+    <!-- Right Column: Music Queue List -->
+    <div class="col-lg-6">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="section-label mb-0">
+                Up Next Queue (@(Model.PlaybackInfo?.Queue?.Count ?? 0))
+            </span>
+        </div>
+
         @if (Model.PlaybackInfo?.Queue != null && Model.PlaybackInfo.Queue.Any())
         {
-            <div class="rounded-lg shadow bg-white mb-6 p-6 max-h-96 overflow-y-auto">
-                <ul class="space-y-4">
-                    @foreach (var track in Model.PlaybackInfo.Queue)
-                    {
-                        var queueTrack = track.FullTrack;
-                        if (queueTrack != null)
+            <div class="clean-panel p-0">
+                <table class="queue-table">
+                    <thead>
+                        <tr>
+                            <th style="padding-left: 1rem; width: 40px;">#</th>
+                            <th style="width: 52px;">Cover</th>
+                            <th>Song / Artist</th>
+                            <th style="padding-right: 1rem; text-align: right; width: 70px;">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ int idx = 1; }
+                        @foreach (var item in Model.PlaybackInfo.Queue)
                         {
-                            <li class="flex items-center space-x-4 p-2 rounded-md hover:bg-gray-50">
-                                @if (!string.IsNullOrWhiteSpace(queueTrack.Album.Images.LastOrDefault()?.Url))
-                                {
-                                    <img src="@queueTrack.Album.Images.LastOrDefault()?.Url" width="50" height="50" class="rounded shadow flex-shrink-0" />
-                                }
-                                <div class="overflow-hidden">
-                                    <h6 class="font-semibold truncate">@queueTrack.Name</h6>
-                                    <p class="text-gray-600 text-sm truncate">@string.Join(", ", queueTrack.Artists.Select(a => a.Name))</p>
-                                </div>
-                            </li>
+                            var qTrack = item.FullTrack;
+                            if (qTrack != null)
+                            {
+                                var qCover = qTrack.Album?.Images?.LastOrDefault()?.Url;
+                                var qDuration = TimeSpan.FromMilliseconds(qTrack.DurationMs);
+                                <tr class="queue-row">
+                                    <td class="queue-cell queue-idx" style="padding-left: 1rem;">@idx</td>
+                                    <td class="queue-cell">
+                                        @if (!string.IsNullOrWhiteSpace(qCover))
+                                        {
+                                            <img src="@qCover" alt="Cover" class="queue-thumb" />
+                                        }
+                                        else
+                                        {
+                                            <div class="queue-thumb d-flex align-items-center justify-content-center text-muted" style="font-size: 0.7rem;">-</div>
+                                        }
+                                    </td>
+                                    <td class="queue-cell">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="queue-name">@qTrack.Name</span>
+                                            @if (qTrack.Explicit)
+                                            {
+                                                <span class="pill pill-red" style="padding: 0.1rem 0.3rem; font-size: 0.65rem;">E</span>
+                                            }
+                                        </div>
+                                        <div class="queue-sub">
+                                            @string.Join(", ", qTrack.Artists.Select(a => a.Name))
+                                        </div>
+                                    </td>
+                                    <td class="queue-cell text-muted" style="padding-right: 1rem; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums;">
+                                        @qDuration.Minutes:@qDuration.Seconds.ToString("D2")
+                                    </td>
+                                </tr>
+                                idx++;
+                            }
                         }
-                    }
-                </ul>
+                    </tbody>
+                </table>
             </div>
         }
         else
         {
-            <div class="rounded-lg shadow bg-white mb-6 p-6 flex items-center justify-center h-64">
-                <p class="text-gray-500 text-center">The queue is empty.</p>
+            <div class="empty-box">
+                <p class="mb-0">The queue is empty.</p>
             </div>
         }
     </div>
 </div>
-
-
-<div class="flex flex-col md:flex-row gap-2 justify-center mt-8">
-    <form method="post">
-        @if (Model.IsMonitoring)
-        {
-            <button type="submit" asp-page-handler="StopMonitor" class="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition">Stop Monitoring</button>
-        }
-        else
-        {
-            <button type="submit" asp-page-handler="StartMonitor" class="px-4 py-2 rounded bg-green-600 text-white font-semibold hover:bg-green-700 transition">Start Monitoring</button>
-        }
-    </form>
-    <form method="post">
-        <button type="submit" asp-page-handler="RefreshData" class="px-4 py-2 rounded bg-blue-100 text-blue-700 font-semibold hover:bg-blue-200 transition">🔄 Refresh Data</button>
-    </form>
-</div>
-<p class="text-gray-500 text-center mt-4">@Model.StatusMessage</p>
 
 @section Scripts {
     <script>
@@ -110,21 +200,18 @@
             const eventSource = new EventSource("/SpotifyEvents");
 
             eventSource.addEventListener("playbackInfo", function (event) {
-                console.log("Playback info received, reloading page.");
-                // Simple reload to update the whole UI state including queue
+                console.log("Playback info received, refreshing UI state.");
                 location.reload();
             });
 
             eventSource.addEventListener("trackSkipped", function (event) {
                 console.log("Track skipped event received:", event.data);
                 const data = JSON.parse(event.data);
-
-                // Display a notification
                 alert(`Track Skipped: "${data.trackName}" by ${data.artist}.\nReason: ${data.reason}`);
             });
 
             eventSource.onerror = function (err) {
-                console.error("EventSource failed:", err);
+                console.error("EventSource connection error:", err);
                 eventSource.close();
             };
         });

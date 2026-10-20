@@ -1,31 +1,307 @@
-html {
-  font-size: 14px;
+/* ==========================================================================
+   Alify Clean Minimalist Design System
+   Pure White (#ffffff), High-Contrast Typography, Zero Sloppy Gradients
+   ========================================================================== */
+
+:root {
+  --bg-pure: #ffffff;
+  --text-main: #111111;
+  --text-muted: #666666;
+  --text-subtle: #999999;
+  --border-light: #e5e7eb;
+  --border-solid: #111111;
+  --accent-green: #15803d;
+  --accent-red: #b91c1c;
+  --accent-blue: #1d4ed8;
 }
 
-@media (min-width: 768px) {
-  html {
-    font-size: 16px;
+html, body {
+  background-color: #ffffff !important;
+  color: #111111;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Strictly eliminate shadows, 3D effects, and transitions */
+*, *::before, *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transition: none !important;
+}
+
+/* Layout container */
+.app-container {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem 1rem;
+}
+
+/* Top Navigation */
+.navbar {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 0.85rem 0;
+}
+
+.navbar-brand {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #111111 !important;
+}
+
+.nav-link {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #555555 !important;
+  padding: 0.4rem 0.8rem !important;
+}
+
+.nav-link:hover {
+  color: #111111 !important;
+}
+
+/* Section Labels */
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+/* Panels */
+.clean-panel {
+  background-color: #ffffff;
+  border: 1px solid var(--border-light);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Controls Bar */
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background-color: #ffffff;
+  border: 1px solid var(--border-light);
+  margin-bottom: 1.5rem;
+}
+
+/* Flat Buttons (No Gradients, No 3D) */
+.btn-flat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-solid);
+  background-color: #111111;
+  color: #ffffff;
+  border-radius: 2px;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.btn-flat:hover {
+  background-color: #333333;
+  color: #ffffff;
+}
+
+.btn-flat-secondary {
+  background-color: #ffffff;
+  color: #111111;
+  border: 1px solid var(--border-light);
+}
+
+.btn-flat-secondary:hover {
+  background-color: #f9f9f9;
+  border-color: #111111;
+  color: #111111;
+}
+
+.btn-flat-danger {
+  background-color: #ffffff;
+  color: var(--accent-red);
+  border: 1px solid var(--accent-red);
+}
+
+.btn-flat-danger:hover {
+  background-color: var(--accent-red);
+  color: #ffffff;
+}
+
+/* Status Badges */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border-light);
+  background: #ffffff;
+  color: #333333;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pill-green {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.pill-red {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.pill-blue {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+/* Now Playing Display */
+.now-playing-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .now-playing-wrap {
+    flex-direction: row;
+    align-items: flex-start;
   }
 }
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+.now-playing-cover {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border: 1px solid var(--border-light);
+  background-color: #ffffff;
+  flex-shrink: 0;
 }
 
-html {
-  position: relative;
-  min-height: 100%;
+.now-playing-info {
+  flex-grow: 1;
 }
 
-body {
-  margin-bottom: 60px;
+.now-playing-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #111111;
+  margin: 0 0 0.25rem 0;
+  line-height: 1.25;
 }
 
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-  color: var(--bs-secondary-color);
-  text-align: end;
+.now-playing-artist {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0 0 0.75rem 0;
 }
 
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-  text-align: start;
+/* Queue List / Table */
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.queue-table th {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border-light);
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  text-align: left;
+}
+
+.queue-row {
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.queue-row:last-child {
+  border-bottom: none;
+}
+
+.queue-cell {
+  padding: 0.65rem 0.5rem 0.65rem 0;
+  vertical-align: middle;
+}
+
+.queue-idx {
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+  width: 2rem;
+}
+
+.queue-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border: 1px solid var(--border-light);
+  display: block;
+}
+
+.queue-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111111;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.queue-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0.15rem 0 0 0;
+}
+
+/* Lyrics Box */
+.lyrics-preview {
+  border: 1px solid var(--border-light);
+  background: #ffffff;
+  padding: 1rem;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #222222;
+  white-space: pre-wrap;
+  margin-top: 1rem;
+}
+
+/* Empty States */
+.empty-box {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--border-light);
+  background-color: #ffffff;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Footer */
+footer {
+  background-color: #ffffff !important;
+  border-top: 1px solid var(--border-light) !important;
+  color: var(--text-muted) !important;
+  padding: 1.25rem 0;
+  font-size: 0.825rem;
 }
