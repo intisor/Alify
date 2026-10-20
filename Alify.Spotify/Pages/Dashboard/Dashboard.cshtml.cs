@@ -50,18 +50,24 @@ namespace Alify.Pages
                 _logger.LogWarning("Dashboard accessed without authentication");
                 return RedirectToPage("/Index");
             }
-            CurrentUser = await _spotifyService.CurrentUserAsync();
-            string? userId = CurrentUser?.Id;
 
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
-            if (string.IsNullOrEmpty(accessToken) || userId == null)
+            if (string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogWarning("Dashboard accessed without authentication or user ID.");
+                _logger.LogWarning("Dashboard accessed without authentication access token.");
                 return RedirectToPage("/Index");
             }
 
             try
             {
+                CurrentUser = await _spotifyService.CurrentUserAsync();
+                string? userId = CurrentUser?.Id ?? _httpContextAccessor.HttpContext?.Session.GetString("SpotifyUserId");
+                if (string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogWarning("Dashboard accessed without user ID.");
+                    StatusMessage = "Could not load Spotify profile. Please click Refresh Queue.";
+                    return Page();
+                }
                 var spotifyConfig = this.ResolveService<SpotifyClientConfig>();
                 var spotify = new SpotifyClient(spotifyConfig.WithToken(accessToken));
 
@@ -167,7 +173,15 @@ namespace Alify.Pages
                 _logger.LogWarning("Start monitor attempted without authentication");
             }
 
-            await OnGetAsync();
+            try
+            {
+                await OnGetAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing dashboard state after starting monitor");
+                IsMonitoring = this.ResolveService<SpotifyPlaybackMonitorService>().IsMonitoring;
+            }
             return Page();
         }
 
@@ -202,7 +216,15 @@ namespace Alify.Pages
                 StatusMessage = "Error stopping monitoring. Please try again.";
             }
 
-            await OnGetAsync();
+            try
+            {
+                await OnGetAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing dashboard state after stopping monitor");
+                IsMonitoring = this.ResolveService<SpotifyPlaybackMonitorService>().IsMonitoring;
+            }
             return Page();
         }
 
@@ -327,7 +349,14 @@ namespace Alify.Pages
                 StatusMessage = "Error refreshing data. Please try again.";
             }
 
-            await OnGetAsync();
+            try
+            {
+                await OnGetAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error refreshing dashboard state after data refresh");
+            }
             return Page();
         }
 

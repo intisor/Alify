@@ -390,12 +390,69 @@ public class SpotifyService
 
     public async Task<PrivateUser?> CurrentUserAsync()
     {
+        string? cacheKey = null;
+        try
+        {
+            cacheKey = GetUserSpecificCacheKey("CurrentUserProfile");
+            if (_cache.TryGetValue(cacheKey, out PrivateUser? cachedUser) && cachedUser != null)
+            {
+                return cachedUser;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not resolve user cache key or cached profile");
+        }
+
         SpotifyClient? client = await GetSpotifyClientAsync();
         if (client == null)
         {
             return null;
         }
-        return await client.UserProfile.Current();
+
+        // Retry loop for transient SSL / transport stream EOF hiccups
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                var user = await client.UserProfile.Current();
+                if (user != null)
+                {
+                    if (cacheKey != null)
+                    {
+                        _cache.Set(cacheKey, user, TimeSpan.FromMinutes(30));
+                    }
+                    try
+                    {
+                        Session.SetString("SpotifyUserId", user.Id);
+                    }
+                    catch { }
+                    return user;
+                }
+            }
+            catch (Exception ex) when (attempt == 1)
+            {
+                _logger.LogWarning(ex, "Transient error fetching Spotify user profile on attempt {Attempt}. Retrying once...", attempt);
+                await Task.Delay(200);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to retrieve Spotify user profile after {Attempt} attempts", attempt);
+            }
+        }
+
+        // Fallback: If we have cached the user's ID in Session, create a minimal user so caller does not crash
+        try
+        {
+            var storedUserId = Session.GetString("SpotifyUserId");
+            if (!string.IsNullOrEmpty(storedUserId))
+            {
+                return new PrivateUser { Id = storedUserId, DisplayName = storedUserId };
+            }
+        }
+        catch { }
+
+        return null;
     }
     /// <summary>
     /// Creates a user-specific cache key using the session ID.

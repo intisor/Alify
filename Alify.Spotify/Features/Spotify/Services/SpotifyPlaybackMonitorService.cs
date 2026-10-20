@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Alify.Features.Spotify.Events;
 using Alify.Features.Spotify.Services;
+using SpotifyAPI.Web;
 
 namespace Alify.Services;
 
@@ -271,10 +272,29 @@ public sealed class SpotifyPlaybackMonitorService(
     /// <summary>
     /// Modern async approach with optional return for content filtering
     /// </summary>
-    private async Task<int?> ProcessContentFiltering(dynamic spotify, bool trackChanged)
+    private async Task<int?> ProcessContentFiltering(SpotifyClient spotify, bool trackChanged)
     {
-        var currentUser = await spotify.UserProfile.Current();
-        string? userId = currentUser?.Id;
+        string? userId = null;
+        if (cache.TryGetValue("SpotifyUserId", out string? cachedId) && !string.IsNullOrEmpty(cachedId))
+        {
+            userId = cachedId;
+        }
+        else
+        {
+            try
+            {
+                var currentUser = await spotify.UserProfile.Current();
+                userId = currentUser?.Id;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    cache.Set("SpotifyUserId", userId, TimeSpan.FromHours(1));
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not fetch user profile in monitor loop");
+            }
+        }
 
         return userId switch
         {
@@ -284,7 +304,7 @@ public sealed class SpotifyPlaybackMonitorService(
         };
     }
 
-    private async Task<int?> ProcessFlaggedContent(string userId, dynamic spotify)
+    private async Task<int?> ProcessFlaggedContent(string userId, SpotifyClient spotify)
     {
         var result = await queueService.SkipFlaggedSongsAsync(userId, spotify);
 
@@ -293,9 +313,10 @@ public sealed class SpotifyPlaybackMonitorService(
             _edgeCaseState.OnTrackSkipped();
 
             await spotifySubject.NotifyTrackSkippedEventAsync(result.TargetTrack);
+            var artistName = result.TargetTrack.FullTrack?.Artists?.FirstOrDefault()?.Name ?? "Unknown";
             logger.LogInformation("Track skipped and observers notified: {TrackName} by {Artist}",
-                (object)(result.TargetTrack.FullTrack?.Name ?? "Unknown"),
-                (object)(result.TargetTrack.FullTrack?.Artists?.FirstOrDefault()?.Name ?? "Unknown"));
+                result.TargetTrack.FullTrack?.Name ?? "Unknown",
+                artistName);
 
             return _options.PostSkipCheckDelayMs;
         }
