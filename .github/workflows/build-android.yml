@@ -1,0 +1,51 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Alify.Android/**'
+      - '.github/workflows/build-android.yml'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build & Package Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x Alify.Android/gradlew
+
+      - name: Build Android Release APK
+        run: |
+          cd Alify.Android
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Locate and Rename APK
+        run: |
+          mkdir -p artifacts
+          cp Alify.Android/app/build/outputs/apk/release/app-release.apk artifacts/Alify.apk
+          echo "APK successfully built at artifacts/Alify.apk"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alify-Android-APK
+          path: artifacts/Alify.apk
+          retention-days: 30

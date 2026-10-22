@@ -1,0 +1,42 @@
+name: Build Windows Desktop Release
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'Alify.Spotify/**'
+      - 'Alify.Core/**'
+      - '.github/workflows/build-desktop.yml'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-desktop:
+    name: Build Standalone Windows Executable
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Single-File Executable
+        run: dotnet publish Alify.Spotify/Alify.Spotify.csproj -c Release -r win-x64 -p:PublishSingleFile=true -o ./publish/win-x64
+
+      - name: Compress Release Archive
+        run: |
+          Copy-Item "publish\win-x64\Alify.Spotify.exe" "publish\win-x64\Alify.exe" -Force
+          Compress-Archive -Path 'publish\win-x64\*' -DestinationPath 'publish\Alify-Windows-x64.zip' -Force
+
+      - name: Upload Windows Executable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alify-Windows-x64
+          path: publish/Alify-Windows-x64.zip
+          retention-days: 30

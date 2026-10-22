@@ -24,6 +24,11 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) && !args.Any(a => a.StartsWith("--urls", StringComparison.OrdinalIgnoreCase)))
+{
+    builder.WebHost.UseUrls("http://127.0.0.1:5001");
+}
+
 var dopplerToken = builder.Configuration["DOPPLER_TOKEN"];
 builder.Configuration.AddDoppler(dopplerToken);
 
@@ -139,6 +144,23 @@ app.UseSession();
 app.UseAuthorization();
 app.MapControllers();
 app.MapRazorPages();
+
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    if (Environment.GetEnvironmentVariable("ALIFY_NO_BROWSER") == null && !app.Environment.IsEnvironment("Testing"))
+    {
+        try
+        {
+            var targetUrl = "http://127.0.0.1:5001";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = targetUrl,
+                UseShellExecute = true
+            });
+        }
+        catch { /* Ignore in headless environments */ }
+    }
+});
 
 app.Lifetime.ApplicationStopping.Register(() =>
 {

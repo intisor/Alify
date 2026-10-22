@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Alify" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/spotify_green</item>
+        <item name="colorPrimaryVariant">#1AA34A</item>
+        <item name="colorOnPrimary">@color/spotify_light_text</item>
+        <item name="android:statusBarColor">@color/spotify_black</item>
+        <item name="android:windowBackground">@color/spotify_black</item>
+    </style>
+</resources>
