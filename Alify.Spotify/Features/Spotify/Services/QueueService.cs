@@ -77,6 +77,31 @@ namespace Alify.Features.Spotify.Services
 					newQueue.EnqueueTrack(BuildTrack(track, userPrefs));
 				}
 			}
+
+			// 1. Enrich currently playing track with lyrics and policy moderation immediately
+			if (newQueue.CurrentTrack != null && _freeLyricsProvider != null)
+			{
+				await EnrichTrackWithLyricsAndPolicyAsync(newQueue.CurrentTrack, userId, userPrefs);
+			}
+
+			// 2. Pre-enrich the top upcoming queued tracks
+			foreach (var qTrack in newQueue.Tracks.Skip(1).Take(4))
+			{
+				if (qTrack.FullTrack != null && !qTrack.IsFlagged)
+				{
+					await EnrichTrackWithLyricsAndPolicyAsync(qTrack, userId, userPrefs);
+				}
+				else
+				{
+					EnrichFromCache(qTrack, userId, userPrefs);
+				}
+			}
+
+			foreach (var qTrack in newQueue.Tracks.Skip(5))
+			{
+				EnrichFromCache(qTrack, userId, userPrefs);
+			}
+
 			_cache.Set(cacheKey, newQueue, TimeSpan.FromSeconds(30));
 			newQueue.CachedAt = DateTime.UtcNow;
 			_logger.LogInformation("Queue for user {UserId} built with {TrackCount} tracks.", userId, newQueue.Tracks.Count);
@@ -85,14 +110,152 @@ namespace Alify.Features.Spotify.Services
 
 		private static Track BuildTrack(FullTrack track, UserFilterPreferences? prefs = null)
 		{
-			bool isExplicitFlagged = (prefs == null || prefs.FilterSpotifyExplicit) && track.Explicit;
+			var policyPrefs = prefs?.ToPolicyPreferences();
+			bool explicitOptIn = policyPrefs?.ExplicitFilterOptIn ?? prefs?.FilterSpotifyExplicit ?? true;
+			bool isExplicitFlagged = explicitOptIn && track.Explicit;
 			return new Track
 			{
 				FullTrack = track,
 				IsFlagged = isExplicitFlagged,
+				FlagReason = isExplicitFlagged ? (prefs != null && prefs.Profile != FilterProfile.General ? $"Explicit Content ({prefs.Profile} Ethos)" : "Spotify Explicit Tag [E]") : null,
 				Lyrics = null,
 				MappedLyrics = null
 			};
+		}
+
+		public async Task EnrichTrackWithLyricsAndPolicyAsync(Track trackObj, string userId, UserFilterPreferences userPrefs)
+		{
+			if (trackObj.FullTrack == null || _freeLyricsProvider == null) return;
+
+			var artist = trackObj.FullTrack.Artists?.FirstOrDefault()?.Name;
+			var trackName = trackObj.FullTrack.Name;
+			var trackId = trackObj.FullTrack.Id ?? $"{artist}_{trackName}";
+			if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(trackName)) return;
+
+			var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
+			if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
+			{
+				lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);
+				_cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));
+			}
+
+			trackObj.Lyrics = lyrics;
+
+			if (trackObj.IsFlagged && string.IsNullOrEmpty(trackObj.FlagReason))
+			{
+				trackObj.FlagReason = userPrefs.Profile != FilterProfile.General ? $"Explicit Content ({userPrefs.Profile} Ethos)" : "Spotify Explicit Tag [E]";
+			}
+
+			int policyVersion = _cache.TryGetValue($"policy_version_{userId}", out int pv) ? pv : 0;
+			var stanceCacheKey = $"stance_{userId}_v{policyVersion}_{userPrefs.Profile}_{userPrefs.StrictnessLevel}_{trackId}".ToLowerInvariant();
+			if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
+			{
+				if (cachedResult.IsFlagged)
+				{
+					trackObj.IsFlagged = true;
+					trackObj.FlagReason = cachedResult.SkipReason;
+				}
+				return;
+			}
+
+			if (!string.IsNullOrWhiteSpace(lyrics))
+			{
+				var policyPrefs = userPrefs.ToPolicyPreferences();
+				var sourceVersion = _normalizer.Normalize(lyrics, sourceId: trackObj.FullTrack.Id);
+				var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+
+				var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);
+				if (policyEval.Decision == PolicyDecision.RecommendSkip)
+				{
+					trackObj.IsFlagged = true;
+					var summary = string.Join("; ", policyEval.ReasonCodes);
+					trackObj.FlagReason = $"Lyrics Violation: {summary}";
+					_cache.Set(stanceCacheKey, new StanceEvaluationResult
+					{
+						IsFlagged = true,
+						SkipReason = trackObj.FlagReason,
+						Lyrics = lyrics
+					}, TimeSpan.FromHours(1));
+				}
+				else if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
+				{
+					try
+					{
+						var geminiAnalysis = await _geminiEngine.AnalyzeAsync(
+							sourceVersion,
+							targetLanguage: "en",
+							profile: userPrefs.Profile,
+							strictnessLevel: userPrefs.StrictnessLevel);
+
+						if (geminiAnalysis.Status == AnalysisStatus.Completed)
+						{
+							var geminiPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(geminiAnalysis, policyPrefs);
+							if (geminiPolicyEval.Decision == PolicyDecision.RecommendSkip)
+							{
+								trackObj.IsFlagged = true;
+								var geminiSummary = string.Join("; ", geminiPolicyEval.ReasonCodes);
+								trackObj.FlagReason = $"{userPrefs.Profile} Ethos Violation ({geminiSummary})";
+								_logger.LogInformation("Track '{Track}' by '{Artist}' flagged by Gemini 2.5 Flash for profile {Profile}: {Summary}", trackName, artist, userPrefs.Profile, geminiSummary);
+
+								_cache.Set(stanceCacheKey, new StanceEvaluationResult
+								{
+									IsFlagged = true,
+									SkipReason = trackObj.FlagReason,
+									Lyrics = lyrics
+								}, TimeSpan.FromHours(1));
+								return;
+							}
+						}
+					}
+					catch (Exception ex)
+					{
+						_logger.LogWarning(ex, "Gemini 2.5 Flash analysis error during queue enrichment for track {TrackName}", trackName);
+					}
+
+					_cache.Set(stanceCacheKey, new StanceEvaluationResult
+					{
+						IsFlagged = false,
+						SkipReason = string.Empty,
+						Lyrics = lyrics
+					}, TimeSpan.FromHours(1));
+				}
+				else
+				{
+					_cache.Set(stanceCacheKey, new StanceEvaluationResult
+					{
+						IsFlagged = false,
+						SkipReason = string.Empty,
+						Lyrics = lyrics
+					}, TimeSpan.FromHours(1));
+				}
+			}
+		}
+
+		private void EnrichFromCache(Track trackObj, string userId, UserFilterPreferences userPrefs)
+		{
+			if (trackObj.FullTrack == null) return;
+			var artist = trackObj.FullTrack.Artists?.FirstOrDefault()?.Name;
+			var trackName = trackObj.FullTrack.Name;
+			var trackId = trackObj.FullTrack.Id ?? $"{artist}_{trackName}";
+			if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(trackName)) return;
+
+			var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
+			if (_cache.TryGetValue(lyricCacheKey, out string? cachedLyrics) && !string.IsNullOrWhiteSpace(cachedLyrics))
+			{
+				trackObj.Lyrics = cachedLyrics;
+			}
+
+			int policyVersion = _cache.TryGetValue($"policy_version_{userId}", out int pv) ? pv : 0;
+			var stanceCacheKey = $"stance_{userId}_v{policyVersion}_{userPrefs.Profile}_{userPrefs.StrictnessLevel}_{trackId}".ToLowerInvariant();
+			if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
+			{
+				trackObj.Lyrics ??= cachedResult.Lyrics;
+				if (cachedResult.IsFlagged)
+				{
+					trackObj.IsFlagged = true;
+					trackObj.FlagReason = cachedResult.SkipReason;
+				}
+			}
 		}
 
 		public UserFilterPreferences GetUserFilterPreferences(string userId)
@@ -110,9 +273,14 @@ namespace Alify.Features.Spotify.Services
 			ArgumentNullException.ThrowIfNull(preferences);
 			var prefsKey = $"policy_prefs_{userId}";
 			_cache.Set(prefsKey, preferences, TimeSpan.FromDays(30));
+
+			var versionKey = $"policy_version_{userId}";
+			int currentVersion = _cache.TryGetValue(versionKey, out int v) ? v + 1 : 1;
+			_cache.Set(versionKey, currentVersion, TimeSpan.FromDays(30));
+
 			InvalidateQueue(userId);
-			_logger.LogInformation("Saved filter preferences for user {UserId}: Explicit={Explicit}, ViolenceEndorsed={VEnd}, ViolenceMentioned={VMen}, SubstanceEndorsed={SEnd}, SubstanceMentioned={SMen}",
-				userId, preferences.FilterSpotifyExplicit, preferences.FilterViolenceEndorsed, preferences.FilterViolenceMentioned, preferences.FilterSubstanceEndorsed, preferences.FilterSubstanceMentioned);
+			_logger.LogInformation("Saved filter preferences for user {UserId} (Policy v{Version}): Profile={Profile}, Strictness={Strictness}, Explicit={Explicit}",
+				userId, currentVersion, preferences.Profile, preferences.StrictnessLevel, preferences.FilterSpotifyExplicit);
 		}
 
 		/// <summary>

@@ -60,7 +60,7 @@
                 <span class="pill">○ Gemini LLM Off</span>
             }
 
-            @if (Model.FilterPreferences.FilterSpotifyExplicit)
+            @if (Model.FilterPreferences.FilterSpotifyExplicit || (Model.FilterPreferences.Profile != Alify.Core.Features.Analysis.Policy.FilterProfile.General && Model.FilterPreferences.Profile != Alify.Core.Features.Analysis.Policy.FilterProfile.Custom))
             {
                 <span class="pill pill-red">Explicit: Skip</span>
             }
@@ -387,6 +387,31 @@
                 console.error("EventSource connection error:", err);
                 eventSource.close();
             };
+
+            const profileSelect = document.getElementById('profileSelect');
+            const explicitBox = document.querySelector('input[name="FilterPreferences.FilterSpotifyExplicit"]');
+            const vEndBox = document.querySelector('input[name="FilterPreferences.FilterViolenceEndorsed"]');
+            const sEndBox = document.querySelector('input[name="FilterPreferences.FilterSubstanceEndorsed"]');
+            const vMenBox = document.querySelector('input[name="FilterPreferences.FilterViolenceMentioned"]');
+            const sMenBox = document.querySelector('input[name="FilterPreferences.FilterSubstanceMentioned"]');
+            const slider = document.getElementById('strictnessSlider');
+
+            function syncProfileCheckboxes() {
+                const val = profileSelect?.value;
+                const strictness = parseInt(slider?.value || '5', 10);
+                if (val === 'Islamic' || val === 'Christian' || val === 'FamilyFriendly') {
+                    if (explicitBox) explicitBox.checked = true;
+                    if (vEndBox) vEndBox.checked = true;
+                    if (sEndBox) sEndBox.checked = true;
+                    if (strictness >= 7) {
+                        if (vMenBox) vMenBox.checked = true;
+                        if (sMenBox) sMenBox.checked = true;
+                    }
+                }
+            }
+
+            profileSelect?.addEventListener('change', syncProfileCheckboxes);
+            slider?.addEventListener('input', syncProfileCheckboxes);
         });
     </script>
 }

@@ -49,7 +49,7 @@ namespace Alify.Pages
 
         public async Task<IActionResult> OnGetAsync()
         {
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 _logger.LogWarning("Dashboard accessed without authentication");
                 return RedirectToPage("/Index");
@@ -139,11 +139,18 @@ namespace Alify.Pages
 
         public async Task<IActionResult> OnPostStartMonitorAsync()
         {
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
+            {
+                StatusMessage = "Authentication required. Please login to Spotify first.";
+                _logger.LogWarning("Start monitor attempted without authentication");
+                return Page();
+            }
+
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
             if (string.IsNullOrEmpty(accessToken))
             {
                 StatusMessage = "Authentication required. Please login to Spotify first.";
-                _logger.LogWarning("Start monitor attempted without authentication");
+                _logger.LogWarning("Start monitor attempted without authentication access token");
                 return Page();
             }
 
@@ -153,28 +160,20 @@ namespace Alify.Pages
                 cache.Set("SpotifyAuthToken", accessToken, TimeSpan.FromMinutes(60));
             });
 
-            // Only start monitoring if authenticated
-            if (_spotifyService.IsAuthenticated())
+            // Start monitoring
+            try
             {
-                try
+                await this.WithServiceAsync<SpotifyPlaybackMonitorService>(async monitorService =>
                 {
-                    await this.WithServiceAsync<SpotifyPlaybackMonitorService>(async monitorService =>
-                    {
-                        await monitorService.StartMonitoringAsync();
-                        StatusMessage = "Playback monitoring started successfully.";
-                        HighPerformanceLogging.LogMonitoringStarted(_logger);
-                    });
-                }
-                catch (Exception ex)
-                {
-                    HighPerformanceLogging.LogMonitoringError(_logger, ex, "SpotifyQueueMonitorService");
-                    StatusMessage = "Error starting monitoring. Please try again.";
-                }
+                    await monitorService.StartMonitoringAsync();
+                    StatusMessage = "Playback monitoring started successfully.";
+                    HighPerformanceLogging.LogMonitoringStarted(_logger);
+                });
             }
-            else
+            catch (Exception ex)
             {
-                StatusMessage = "Authentication required. Please login to Spotify first.";
-                _logger.LogWarning("Start monitor attempted without authentication");
+                HighPerformanceLogging.LogMonitoringError(_logger, ex, "SpotifyQueueMonitorService");
+                StatusMessage = "Error starting monitoring. Please try again.";
             }
 
             try
@@ -192,7 +191,7 @@ namespace Alify.Pages
         public async Task<IActionResult> OnPostStopMonitorAsync()
         {
             // Only allow stopping monitor if authenticated
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 StatusMessage = "Authentication required. Please login to Spotify first.";
                 _logger.LogWarning("Stop monitor attempted without authentication");
@@ -235,7 +234,7 @@ namespace Alify.Pages
         public async Task<IActionResult> OnPostRefreshDataAsync()
         {
             // Only allow refresh if authenticated
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 StatusMessage = "Authentication required. Please login to Spotify first.";
                 _logger.LogWarning("Refresh data attempted without authentication");
@@ -429,7 +428,7 @@ namespace Alify.Pages
 
         public async Task<IActionResult> OnPostSaveFilterPreferencesAsync()
         {
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 StatusMessage = "Authentication required. Please login to Spotify first.";
                 _logger.LogWarning("Save filter preferences attempted without authentication");
@@ -452,6 +451,11 @@ namespace Alify.Pages
                     StatusMessage = "Authentication required to update filter preferences.";
                     _logger.LogWarning("Save filter preferences attempted without valid user ID");
                     return Page();
+                }
+
+                if (FilterPreferences.Profile != FilterProfile.General && FilterPreferences.Profile != FilterProfile.Custom)
+                {
+                    FilterPreferences = FilterPreferences with { FilterSpotifyExplicit = true };
                 }
 
                 _queueService.SaveUserFilterPreferences(userId, FilterPreferences);
