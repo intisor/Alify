@@ -4,13 +4,17 @@
     "Projects": [
       {
         "Path": "Alify.Lyrics\\Alify.Lyrics.csproj",
-        "Action": "Start",
+        "Action": "StartWithoutDebugging",
         "DebugTarget": "http"
       },
       {
         "Path": "Alify.Spotify\\Alify.Spotify.csproj",
         "Action": "Start",
         "DebugTarget": "http"
+      },
+      {
+        "Path": "Alify.Core\\Alify.Core.csproj",
+        "Action": "StartWithoutDebugging"
       }
     ]
   }
