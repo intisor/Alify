@@ -85,8 +85,10 @@ public class SpotifyService
     /// </remarks>
     public string StartAuth()
     {
-        // Get configuration values from appsettings.json or user secrets
-        var clientId = _spotifyOptions.ClientId!;
+        // Determine Client ID: use user-provided ID if BYOK is enabled, otherwise use configured ClientId
+        string clientId = _spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
+            ? _spotifyOptions.ClientId  // User will provide this at auth time via UI
+            : (_spotifyOptions.ClientId ?? string.Empty);
         // Determine redirect URI: use configured default or dynamic host if accessed via domain/tunnel
         var redirectUri = _spotifyOptions.RedirectUri ?? "http://127.0.0.1:5001/callback";
         var httpContext = _httpContextAccessor.HttpContext;
@@ -124,9 +126,7 @@ public class SpotifyService
             State = state
         };
         return loginRequest.ToUri().ToString();
-    }
-
-    /// <summary>
+    }/// <summary>
     /// Handles the callback from Spotify after user authorization, exchanging the authorization code for an access token via PKCE.
     /// </summary>
     /// <param name="code">The authorization code from Spotify.</param>
@@ -139,28 +139,29 @@ public class SpotifyService
         if (string.IsNullOrEmpty(storedState) || state != storedState)
         {
             return false;
-        }
-
+        }
         var codeVerifier = Session.GetString("SpotifyCodeVerifier");
         if (string.IsNullOrEmpty(codeVerifier))
         {
             return false;
-        }
-
-        var redirectUri = Session.GetString("SpotifyRedirectUri") ?? _spotifyOptions.RedirectUri!;
-
+        }
+        var redirectUri = Session.GetString("SpotifyRedirectUri") ?? _spotifyOptions.RedirectUri!;
         // State and verifier are single-use, remove them from session
         Session.Remove("SpotifyState");
         Session.Remove("SpotifyCodeVerifier");
-        Session.Remove("SpotifyRedirectUri");
-
+        Session.Remove("SpotifyRedirectUri");
+        // Determine Client ID: use configured ClientId or, if BYOK enabled, the user-provided ID
+        string authClientId = _spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
+            ? _spotifyOptions.ClientId
+            : (_spotifyOptions.ClientId ?? string.Empty);
         // Exchange the authorization code for access and refresh tokens via PKCE (no client secret needed)
         var tokenResponse = await new OAuthClient().RequestToken(new PKCETokenRequest(
-            _spotifyOptions.ClientId!,
+            authClientId,
             code,
             new Uri(redirectUri),
             codeVerifier
         ));
+
 
         // Store tokens and expiry date in the session for future use
         var expiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);

@@ -12,11 +12,29 @@ namespace Alify.Core.Models
         public MistralOptions? Mistral { get; set; }
     }           
 
-    [DebuggerDisplay("ClientId: {ClientId}, RedirectUri: {RedirectUri}")]
+    [DebuggerDisplay("ClientId: {ClientId}, UseByok: {UseByok}, RedirectUri: {RedirectUri}")]
     public class SpotifyOptions
     {
+        /// <summary>
+        /// Gets or sets the Spotify Client ID from configuration (used when BYOK is not enabled).
+        /// </summary>
         public string? ClientId { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to use Bring Your Own Keys (BYOK) mode.
+        /// When true, the UserClientId from the user's profile will be used instead of ClientId.
+        /// </summary>
+        public bool UseByok { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Spotify Client Secret.
+        /// <para>Not used in PKCE flow, but kept for configuration completeness.</para>
+        /// </summary>
         public string? ClientSecret { get; set; }
+
+        /// <summary>
+        /// Gets or sets the redirect URI.
+        /// </summary>
         public string? RedirectUri { get; set; }
     }
 
