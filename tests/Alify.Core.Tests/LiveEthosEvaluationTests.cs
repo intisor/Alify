@@ -65,6 +65,8 @@ public class LiveEthosEvaluationTests
         );
 
         _output.WriteLine($"Status: {result.Status}");
+        _output.WriteLine($"ReasonCode: {result.ReasonCode}");
+        _output.WriteLine($"Limitations: {string.Join(", ", result.Limitations)}");
         _output.WriteLine($"Language: {result.Language}");
         _output.WriteLine($"Findings count: {result.Findings.Count}");
 
@@ -82,7 +84,7 @@ public class LiveEthosEvaluationTests
         {
             Profile = FilterProfile.Islamic,
             StrictnessLevel = 10,
-            FilterSpotifyExplicit = true
+            FilterSpotifyExplicit = false
         };
 
         var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(result, userPrefs.ToPolicyPreferences());

@@ -137,7 +137,7 @@
                     android:id="@+id/cbExplicit"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:checked="true"
+                    android:checked="false"
                     android:text="Skip Spotify Explicit [E] tracks"
                     android:textColor="@color/spotify_light_text" />
 

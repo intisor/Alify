@@ -69,10 +69,6 @@ class MainActivity : AppCompatActivity() {
 
         binding.spProfile.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // Auto-check explicit for religious and family profiles
-                if (position <= 2) {
-                    binding.cbExplicit.isChecked = true
-                }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }

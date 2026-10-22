@@ -40,8 +40,9 @@ public record UserFilterPreferences
 
     /// <summary>
     /// Whether to skip tracks marked as Explicit in Spotify's official metadata.
+    /// By default false; Alify relies on semantic lyric and ethos scanning rather than Spotify's blunt [E] tag.
     /// </summary>
-    public bool FilterSpotifyExplicit { get; init; } = true;
+    public bool FilterSpotifyExplicit { get; init; } = false;
 
     /// <summary>
     /// Whether to skip tracks promoting or glorifying violence, weapons, or killing.
@@ -155,7 +156,7 @@ public record UserFilterPreferences
 
         return new PolicyPreferences
         {
-            ExplicitFilterOptIn = FilterSpotifyExplicit || Profile != FilterProfile.General,
+            ExplicitFilterOptIn = FilterSpotifyExplicit,
             TriggerStancesByTopic = triggerStances
         };
     }

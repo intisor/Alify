@@ -24,7 +24,7 @@ data class FilterResult(
 class FilterEngine(
     var profile: EthosProfile = EthosProfile.ISLAMIC,
     var strictness: Int = 10,
-    var filterExplicit: Boolean = true,
+    var filterExplicit: Boolean = false,
     var enableGemini: Boolean = true,
     var geminiApiKey: String = "AIzaSyBEhdVCtri2j6YrF1hAKdZnPk6crcBy1CQ"
 ) {
@@ -57,16 +57,9 @@ class FilterEngine(
         isExplicit: Boolean,
         lyrics: String?
     ): FilterResult = withContext(Dispatchers.Default) {
-        // 1. Explicit tag check (Religious & Family profiles strictly skip explicit)
-        val enforceExplicit = filterExplicit || profile != EthosProfile.GENERAL
-        if (enforceExplicit && isExplicit) {
-            val ethosName = when (profile) {
-                EthosProfile.ISLAMIC -> "Islamic Ethos"
-                EthosProfile.CHRISTIAN -> "Christian Ethos"
-                EthosProfile.FAMILY_FRIENDLY -> "Family Friendly"
-                EthosProfile.GENERAL -> "Spotify Explicit"
-            }
-            return@withContext FilterResult(true, "Explicit Content ($ethosName)")
+        // 1. Explicit tag check (Only if user explicitly opted in to Spotify [E] metadata filter)
+        if (filterExplicit && isExplicit) {
+            return@withContext FilterResult(true, "Spotify Explicit Tag [E]")
         }
 
         if (lyrics.isNullOrBlank()) {

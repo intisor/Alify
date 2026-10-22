@@ -110,14 +110,13 @@ namespace Alify.Features.Spotify.Services
 
 		private static Track BuildTrack(FullTrack track, UserFilterPreferences? prefs = null)
 		{
-			var policyPrefs = prefs?.ToPolicyPreferences();
-			bool explicitOptIn = policyPrefs?.ExplicitFilterOptIn ?? prefs?.FilterSpotifyExplicit ?? true;
+			bool explicitOptIn = prefs?.FilterSpotifyExplicit ?? false;
 			bool isExplicitFlagged = explicitOptIn && track.Explicit;
 			return new Track
 			{
 				FullTrack = track,
 				IsFlagged = isExplicitFlagged,
-				FlagReason = isExplicitFlagged ? (prefs != null && prefs.Profile != FilterProfile.General ? $"Explicit Content ({prefs.Profile} Ethos)" : "Spotify Explicit Tag [E]") : null,
+				FlagReason = isExplicitFlagged ? "Spotify Explicit Tag [E]" : null,
 				Lyrics = null,
 				MappedLyrics = null
 			};
@@ -143,7 +142,7 @@ namespace Alify.Features.Spotify.Services
 
 			if (trackObj.IsFlagged && string.IsNullOrEmpty(trackObj.FlagReason))
 			{
-				trackObj.FlagReason = userPrefs.Profile != FilterProfile.General ? $"Explicit Content ({userPrefs.Profile} Ethos)" : "Spotify Explicit Tag [E]";
+				trackObj.FlagReason = "Spotify Explicit Tag [E]";
 			}
 
 			int policyVersion = _cache.TryGetValue($"policy_version_{userId}", out int pv) ? pv : 0;

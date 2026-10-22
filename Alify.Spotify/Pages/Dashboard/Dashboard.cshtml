@@ -60,7 +60,7 @@
                 <span class="pill">○ Gemini LLM Off</span>
             }
 
-            @if (Model.FilterPreferences.FilterSpotifyExplicit || (Model.FilterPreferences.Profile != Alify.Core.Features.Analysis.Policy.FilterProfile.General && Model.FilterPreferences.Profile != Alify.Core.Features.Analysis.Policy.FilterProfile.Custom))
+            @if (Model.FilterPreferences.FilterSpotifyExplicit)
             {
                 <span class="pill pill-red">Explicit: Skip</span>
             }
@@ -400,7 +400,6 @@
                 const val = profileSelect?.value;
                 const strictness = parseInt(slider?.value || '5', 10);
                 if (val === 'Islamic' || val === 'Christian' || val === 'FamilyFriendly') {
-                    if (explicitBox) explicitBox.checked = true;
                     if (vEndBox) vEndBox.checked = true;
                     if (sEndBox) sEndBox.checked = true;
                     if (strictness >= 7) {

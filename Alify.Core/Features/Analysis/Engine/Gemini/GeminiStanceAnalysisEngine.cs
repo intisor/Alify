@@ -296,18 +296,37 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
         var trimmed = text.Trim();
-        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+
+        // 1. Check for ```json ... ``` code fence anywhere in text
+        int jsonBlockStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
+        if (jsonBlockStart >= 0)
         {
-            trimmed = trimmed["```json".Length..].Trim();
-        }
-        else if (trimmed.StartsWith("```"))
-        {
-            trimmed = trimmed["```".Length..].Trim();
+            int contentStart = jsonBlockStart + "```json".Length;
+            int jsonBlockEnd = trimmed.IndexOf("```", contentStart, StringComparison.Ordinal);
+            if (jsonBlockEnd > contentStart)
+            {
+                return trimmed[contentStart..jsonBlockEnd].Trim();
+            }
         }
 
-        if (trimmed.EndsWith("```"))
+        // 2. Check for generic ``` ... ``` code fence
+        int genericBlockStart = trimmed.IndexOf("```", StringComparison.Ordinal);
+        if (genericBlockStart >= 0)
         {
-            trimmed = trimmed[..^"```".Length].Trim();
+            int contentStart = genericBlockStart + "```".Length;
+            int genericBlockEnd = trimmed.IndexOf("```", contentStart, StringComparison.Ordinal);
+            if (genericBlockEnd > contentStart)
+            {
+                return trimmed[contentStart..genericBlockEnd].Trim();
+            }
+        }
+
+        // 3. Fallback: extract substring between first '{' and last '}'
+        int firstBrace = trimmed.IndexOf('{');
+        int lastBrace = trimmed.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+        {
+            return trimmed.Substring(firstBrace, lastBrace - firstBrace + 1).Trim();
         }
 
         return trimmed;

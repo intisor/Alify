@@ -453,11 +453,6 @@ namespace Alify.Pages
                     return Page();
                 }
 
-                if (FilterPreferences.Profile != FilterProfile.General && FilterPreferences.Profile != FilterProfile.Custom)
-                {
-                    FilterPreferences = FilterPreferences with { FilterSpotifyExplicit = true };
-                }
-
                 _queueService.SaveUserFilterPreferences(userId, FilterPreferences);
                 StatusMessage = "Filter preferences saved successfully.";
                 _logger.LogInformation("Saved filter preferences for user {UserId}", userId);
