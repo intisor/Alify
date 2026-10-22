@@ -11,6 +11,7 @@ public class LiveEthosEvaluationTests
 {
     private readonly ITestOutputHelper _output;
     private const string GEMINI_API_KEY = "AIzaSyBEhdVCtri2j6YrF1hAKdZnPk6crcBy1CQ";
+    private static bool LiveTestsEnabled => Environment.GetEnvironmentVariable("ALIFY_LIVE_TESTS") == "1";
 
     public LiveEthosEvaluationTests(ITestOutputHelper output)
     {
@@ -26,6 +27,7 @@ public class LiveEthosEvaluationTests
     [Fact]
     public async Task Test_NairaMarley_Aye_Under_IslamicEthos_Strictness10()
     {
+        if (!LiveTestsEnabled) return;
         using var httpClient = new HttpClient();
         var client = new HttpGeminiModelClient(httpClient, GEMINI_API_KEY, "gemini-2.5-flash");
         var engine = new GeminiStanceAnalysisEngine(client, ProviderConsent.Granted("gemini-2.5-flash"), new BudgetLedger(100));
@@ -99,6 +101,7 @@ public class LiveEthosEvaluationTests
     [Fact]
     public async Task Test_CleanInspirationalSong_Under_IslamicEthos_Strictness10()
     {
+        if (!LiveTestsEnabled) return;
         using var httpClient = new HttpClient();
         var client = new HttpGeminiModelClient(httpClient, GEMINI_API_KEY, "gemini-2.5-flash");
         var engine = new GeminiStanceAnalysisEngine(client, ProviderConsent.Granted("gemini-2.5-flash"), new BudgetLedger(100));
