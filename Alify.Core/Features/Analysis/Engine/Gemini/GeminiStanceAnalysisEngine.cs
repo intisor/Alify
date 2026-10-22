@@ -32,7 +32,7 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _consent = consent ?? throw new ArgumentNullException(nameof(consent));
         _budgetLedger = budgetLedger ?? throw new ArgumentNullException(nameof(budgetLedger));
-        _timeout = timeout ?? TimeSpan.FromSeconds(15);
+        _timeout = timeout ?? TimeSpan.FromSeconds(30);
     }
 
     public Task<AnalysisResult> AnalyzeAsync(
