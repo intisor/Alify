@@ -17,9 +17,10 @@ namespace Alify.Controllers
         }
 
         [HttpGet("status")]
-        public IActionResult GetAuthStatus()
+        public async Task<IActionResult> GetAuthStatus()
         {
-            return Ok(new { isAuthenticated = _spotifyService.IsAuthenticated() });
+            var isAuthenticated = await _spotifyService.EnsureAuthenticatedAsync();
+            return Ok(new { isAuthenticated });
         }
 
         [HttpPost("logout")]

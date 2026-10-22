@@ -23,6 +23,11 @@ namespace Alify.Controllers
         public async Task<ActionResult<SpotifyPlaybackInfo>> GetCurrentPlayback()
         {
             Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
+            {
+                return Unauthorized();
+            }
+
             var accessToken = _httpContextAccessor.HttpContext?.Session.GetString("SpotifyAccessToken");
             if (string.IsNullOrEmpty(accessToken))
             {

@@ -20,7 +20,7 @@ namespace Alify.Pages
 
         public async Task<IActionResult> OnGet()
         {
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 _logger.LogWarning("Unauthorized SSE connection attempt rejected.");
                 return Unauthorized();

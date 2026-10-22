@@ -17,7 +17,6 @@ using Microsoft.Extensions.Logging;
 [DebuggerDisplay("IsAuthenticated: {IsAuthenticated()}, ClientId: {_spotifyOptions.ClientId}")]
 public class SpotifyService
 {
-    // Dependencies injected through the constructor
     private readonly SpotifyOptions _spotifyOptions;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IMemoryCache _cache;
@@ -26,6 +25,7 @@ public class SpotifyService
     private readonly QueueService _queueService;
     private readonly FreeLyricsProviderService _freeLyricsProvider;
     private readonly ILogger<SpotifyService> _logger;
+    private readonly ISpotifyTokenStore? _tokenStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpotifyService"/> class.
@@ -46,7 +46,8 @@ public class SpotifyService
         ISpotifySubject spotifySubject,
         QueueService queueService,
         FreeLyricsProviderService freeLyricsProvider,
-        ILogger<SpotifyService> logger)
+        ILogger<SpotifyService> logger,
+        ISpotifyTokenStore? tokenStore = null)
     {
         _spotifyOptions = spotifyOptions.Value;
         _httpContextAccessor = httpContextAccessor;
@@ -56,6 +57,7 @@ public class SpotifyService
         _queueService = queueService;
         _freeLyricsProvider = freeLyricsProvider;
         _logger = logger;
+        _tokenStore = tokenStore;
     }
 
     // Defensive null check for HttpContext and Session
@@ -161,12 +163,26 @@ public class SpotifyService
         ));
 
         // Store tokens and expiry date in the session for future use
+        var expiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
         Session.SetString("SpotifyAccessToken", tokenResponse.AccessToken);
         Session.SetString("SpotifyRefreshToken", tokenResponse.RefreshToken ?? "");
-        Session.SetString("SpotifyTokenExpiry", DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn).ToString("o"));
+        Session.SetString("SpotifyTokenExpiry", expiry.ToString("o"));
 
         // Store the access token in IMemoryCache for background services
         _cache.Set("SpotifyAuthToken", tokenResponse.AccessToken, TimeSpan.FromHours(1));
+
+        // Persist tokens securely to encrypted token store across browser refreshes and server reboots
+        if (_tokenStore != null && !string.IsNullOrEmpty(tokenResponse.RefreshToken))
+        {
+            var authData = new SpotifyAuthData
+            {
+                AccessToken = tokenResponse.AccessToken,
+                RefreshToken = tokenResponse.RefreshToken,
+                ExpiresAtUtc = expiry,
+                Scope = string.Join(" ", tokenResponse.Scope ?? "")
+            };
+            await _tokenStore.SaveTokensAsync(authData);
+        }
 
         return true;
     }
@@ -227,62 +243,227 @@ public class SpotifyService
     /// Refreshes the Spotify access token using the refresh token.
     /// </summary>
     /// <returns>True if the token was refreshed successfully, otherwise false.</returns>
-    /// <remarks>
-    /// The OAuth 2.0 flow allows refreshing an expired access token without requiring the user to log in again.
-    /// This method is called automatically by GetSpotifyClientAsync when needed.
-    /// </remarks>
+    /// <summary>
+    /// Refreshes the Spotify access token using the refresh token from session or persistent store.
+    /// </summary>
     private async Task<bool> RefreshTokenAsync()
     {
-        var refreshToken = Session.GetString("SpotifyRefreshToken");
+        string? refreshToken = null;
+        try
+        {
+            refreshToken = Session.GetString("SpotifyRefreshToken");
+        }
+        catch (InvalidOperationException) { }
+
+        if (string.IsNullOrEmpty(refreshToken) && _tokenStore != null)
+        {
+            var stored = await _tokenStore.GetTokensAsync();
+            refreshToken = stored?.RefreshToken;
+        }
+
         if (string.IsNullOrEmpty(refreshToken))
         {
             return false;
         }
 
-        // Request a new access token using the refresh token via PKCE (no client secret needed)
-        var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
-            _spotifyOptions.ClientId!,
-            refreshToken
-        ));
-
-        // Update the session with the new tokens
-        Session.SetString("SpotifyAccessToken", newResponse.AccessToken);
-        Session.SetString("SpotifyTokenExpiry", DateTime.UtcNow.AddSeconds(newResponse.ExpiresIn).ToString("o"));
-        
-        // A new refresh token might be issued, so we update it if available
-        // This is not always provided but should be saved when it is
-        if (!string.IsNullOrEmpty(newResponse.RefreshToken))
+        try
         {
-            Session.SetString("SpotifyRefreshToken", newResponse.RefreshToken);
+            // Request a new access token using the refresh token via PKCE (no client secret needed)
+            var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
+                _spotifyOptions.ClientId!,
+                refreshToken
+            ));
+
+            if (string.IsNullOrEmpty(newResponse.AccessToken))
+            {
+                return false;
+            }
+
+            var expiry = DateTime.UtcNow.AddSeconds(newResponse.ExpiresIn);
+            var updatedRefreshToken = !string.IsNullOrEmpty(newResponse.RefreshToken)
+                ? newResponse.RefreshToken
+                : refreshToken;
+
+            try
+            {
+                Session.SetString("SpotifyAccessToken", newResponse.AccessToken);
+                Session.SetString("SpotifyTokenExpiry", expiry.ToString("o"));
+                Session.SetString("SpotifyRefreshToken", updatedRefreshToken);
+            }
+            catch (InvalidOperationException) { }
+
+            _cache.Set("SpotifyAuthToken", newResponse.AccessToken, TimeSpan.FromHours(1));
+
+            if (_tokenStore != null)
+            {
+                var stored = await _tokenStore.GetTokensAsync();
+                var updatedData = new SpotifyAuthData
+                {
+                    AccessToken = newResponse.AccessToken,
+                    RefreshToken = updatedRefreshToken,
+                    ExpiresAtUtc = expiry,
+                    UserId = stored?.UserId,
+                    Scope = stored?.Scope
+                };
+                await _tokenStore.SaveTokensAsync(updatedData);
+            }
+
+            _logger.LogInformation("Successfully refreshed Spotify access token.");
+            return true;
         }
-        return true;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error refreshing Spotify token.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Ensures that the user is authenticated, restoring or refreshing tokens automatically
+    /// from the persistent encrypted token store if session or token has expired.
+    /// Eliminates the need for the user to log in on page refresh.
+    /// </summary>
+    public async Task<bool> EnsureAuthenticatedAsync()
+    {
+        // 1. Check current session
+        try
+        {
+            var sessionToken = Session.GetString("SpotifyAccessToken");
+            if (!string.IsNullOrEmpty(sessionToken) && !IsTokenExpired())
+            {
+                return true;
+            }
+
+            // Session token is missing or expired, try session refresh token
+            if (await RefreshTokenAsync())
+            {
+                return true;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Outside of active session scope or session expired
+        }
+
+        // 2. Check persistent token store
+        if (_tokenStore != null)
+        {
+            var stored = await _tokenStore.GetTokensAsync();
+            if (stored != null && !string.IsNullOrEmpty(stored.RefreshToken))
+            {
+                // Check if stored access token is still valid
+                if (!stored.IsExpired)
+                {
+                    try
+                    {
+                        Session.SetString("SpotifyAccessToken", stored.AccessToken);
+                        Session.SetString("SpotifyRefreshToken", stored.RefreshToken);
+                        Session.SetString("SpotifyTokenExpiry", stored.ExpiresAtUtc.ToString("o"));
+                        if (!string.IsNullOrEmpty(stored.UserId))
+                        {
+                            Session.SetString("SpotifyUserId", stored.UserId);
+                        }
+                    }
+                    catch (InvalidOperationException) { }
+
+                    _cache.Set("SpotifyAuthToken", stored.AccessToken, TimeSpan.FromHours(1));
+                    return true;
+                }
+
+                // Stored access token is expired; refresh it silently using the persistent refresh token
+                try
+                {
+                    var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
+                        _spotifyOptions.ClientId!,
+                        stored.RefreshToken
+                    ));
+
+                    if (!string.IsNullOrEmpty(newResponse.AccessToken))
+                    {
+                        var newExpiry = DateTime.UtcNow.AddSeconds(newResponse.ExpiresIn);
+                        var newRefreshToken = !string.IsNullOrEmpty(newResponse.RefreshToken)
+                            ? newResponse.RefreshToken
+                            : stored.RefreshToken;
+
+                        var updatedData = new SpotifyAuthData
+                        {
+                            AccessToken = newResponse.AccessToken,
+                            RefreshToken = newRefreshToken,
+                            ExpiresAtUtc = newExpiry,
+                            UserId = stored.UserId,
+                            Scope = stored.Scope
+                        };
+
+                        await _tokenStore.SaveTokensAsync(updatedData);
+
+                        try
+                        {
+                            Session.SetString("SpotifyAccessToken", newResponse.AccessToken);
+                            Session.SetString("SpotifyRefreshToken", newRefreshToken);
+                            Session.SetString("SpotifyTokenExpiry", newExpiry.ToString("o"));
+                            if (!string.IsNullOrEmpty(stored.UserId))
+                            {
+                                Session.SetString("SpotifyUserId", stored.UserId);
+                            }
+                        }
+                        catch (InvalidOperationException) { }
+
+                        _cache.Set("SpotifyAuthToken", newResponse.AccessToken, TimeSpan.FromHours(1));
+                        _logger.LogInformation("Spotify access token silently refreshed and persisted from long-lived refresh token.");
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to refresh Spotify token using persistent refresh token.");
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
     /// Checks if the user is currently authenticated with Spotify.
     /// </summary>
-    /// <returns>True if an access token exists in the session, otherwise false.</returns>
-    /// <remarks>
-    /// Used to determine if the UI should show login options or authorized user features.
-    /// </remarks>
-    public bool IsAuthenticated() => !string.IsNullOrEmpty(Session.GetString("SpotifyAccessToken"));
+    public bool IsAuthenticated()
+    {
+        try
+        {
+            var token = Session.GetString("SpotifyAccessToken");
+            if (!string.IsNullOrEmpty(token)) return true;
+        }
+        catch (InvalidOperationException) { }
+
+        return _cache.TryGetValue("SpotifyAuthToken", out string? cached) && !string.IsNullOrEmpty(cached);
+    }
 
     /// <summary>
-    /// Clears all Spotify authentication data from the session.
+    /// Clears all Spotify authentication data from session, cache, and persistent token store.
     /// </summary>
-    /// <remarks>
-    /// Used for logging out or when authentication has failed irreparably.
-    /// </remarks>
     public void ClearAuthentication()
     {
-        Session.Remove("SpotifyAccessToken");
-        Session.Remove("SpotifyRefreshToken");
-        Session.Remove("SpotifyTokenExpiry");
-        Session.Remove("SpotifyState");
-        Session.Remove("SpotifyCodeVerifier");
+        try
+        {
+            Session.Remove("SpotifyAccessToken");
+            Session.Remove("SpotifyRefreshToken");
+            Session.Remove("SpotifyTokenExpiry");
+            Session.Remove("SpotifyState");
+            Session.Remove("SpotifyCodeVerifier");
+        }
+        catch (InvalidOperationException) { }
 
         // Clear cached background auth token (AUD-005)
         _cache.Remove("SpotifyAuthToken");
+
+        try
+        {
+            _tokenStore?.ClearTokensAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error clearing persistent Spotify tokens.");
+        }
     }
 
     /// <summary>

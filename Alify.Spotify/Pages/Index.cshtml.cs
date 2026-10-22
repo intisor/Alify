@@ -16,9 +16,15 @@ public class IndexModel : PageModel
 
     public bool IsAuthenticated { get; set; }
 
-    public void OnGet()
+    public async Task<IActionResult> OnGetAsync()
     {
-        IsAuthenticated = _spotifyService.IsAuthenticated();
+        if (await _spotifyService.EnsureAuthenticatedAsync())
+        {
+            return RedirectToPage("/Dashboard/Dashboard");
+        }
+
+        IsAuthenticated = false;
+        return Page();
     }
 
     public IActionResult OnPostLogin()

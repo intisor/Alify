@@ -11,6 +11,8 @@ using Serilog;
 using SpotifyAPI.Web;
 using System.Security.Authentication;
 
+using Alify.Core.Infrastructure.Security;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
@@ -57,9 +59,13 @@ builder.Services.AddResponseCompression(options =>
     options.EnableForHttps = true;
 });
 
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<ISpotifyTokenStore, ProtectedFileSpotifyTokenStore>();
+
 builder.Services.AddSession(options =>
 {
-    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.IdleTimeout = TimeSpan.FromDays(30);
+    options.Cookie.MaxAge = TimeSpan.FromDays(30);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = SameSiteMode.Lax;

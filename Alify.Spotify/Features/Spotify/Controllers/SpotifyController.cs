@@ -1,4 +1,4 @@
-﻿using Alify.Core.Services;
+using Alify.Core.Services;
 using Alify.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,7 +35,7 @@ namespace Alify.Controllers
         [HttpPost("start-monitor")]
         public async Task<IActionResult> StartMonitor()
         {
-            if (!_spotifyService.IsAuthenticated())
+            if (!await _spotifyService.EnsureAuthenticatedAsync())
             {
                 return BadRequest("Authentication required. Please login to Spotify first.");
             }
