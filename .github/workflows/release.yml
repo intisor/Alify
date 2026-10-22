@@ -1,0 +1,112 @@
+name: Publish Release (Windows & Android)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x Alify.Android/gradlew
+
+      - name: Build Android Release APK
+        run: |
+          cd Alify.Android
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Stage APK for Release
+        run: |
+          mkdir -p release-assets
+          cp Alify.Android/app/build/outputs/apk/release/app-release.apk release-assets/Alify.apk
+
+      - name: Upload APK Staging Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-apk
+          path: release-assets/Alify.apk
+
+  build-desktop:
+    name: Build Windows Desktop Executable
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Single-File Executable
+        run: dotnet publish Alify.Spotify/Alify.Spotify.csproj -c Release -r win-x64 -p:PublishSingleFile=true -o ./publish/win-x64
+
+      - name: Compress Release Archive
+        run: |
+          Copy-Item "publish\win-x64\Alify.Spotify.exe" "publish\win-x64\Alify.exe" -Force
+          mkdir release-assets
+          Compress-Archive -Path 'publish\win-x64\*' -DestinationPath 'release-assets\Alify-Windows-x64.zip' -Force
+
+      - name: Upload Windows Staging Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: staged-desktop
+          path: release-assets/Alify-Windows-x64.zip
+
+  publish-github-release:
+    name: Create GitHub Release
+    needs: [build-android, build-desktop]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: staged-apk
+          path: final-release
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: staged-desktop
+          path: final-release
+
+      - name: Publish Release with Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            final-release/Alify.apk
+            final-release/Alify-Windows-x64.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

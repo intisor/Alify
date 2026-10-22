@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         handleRedirectIntent(intent)
         startUiPolling()
+        checkForUpdates()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -158,6 +159,39 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+    }
+
+    private fun checkForUpdates() {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val request = okhttp3.Request.Builder()
+                    .url("https://api.github.com/repos/intisor/Alify/releases/latest")
+                    .header("User-Agent", "Alify-Android")
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use
+                    val body = response.body?.string() ?: return@use
+                    val json = org.json.JSONObject(body)
+                    val tagName = json.optString("tag_name")
+                    val htmlUrl = json.optString("html_url")
+                    if (tagName.isNotEmpty() && tagName != "v1.0.0") {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            com.google.android.material.snackbar.Snackbar.make(
+                                binding.root,
+                                "Update available: $tagName",
+                                com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE
+                            ).setAction("Download") {
+                                val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(htmlUrl))
+                                startActivity(browserIntent)
+                            }.show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Silently ignore network failures on update check
             }
         }
     }

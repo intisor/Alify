@@ -5,8 +5,14 @@
     ViewData["Title"] = "Music Dashboard";
 }
 
+<!-- Update Notification Banner -->
+<div id="updateBanner" class="alert alert-info py-2 px-3 mb-2 d-none d-flex justify-content-between align-items-center" style="border-radius: 8px; font-size: 0.85rem;">
+    <span>🚀 <strong>Update Available:</strong> A new version of Alify (<span id="latestVersionTag"></span>) is available!</span>
+    <a id="updateDownloadLink" href="https://github.com/intisor/Alify/releases/latest" target="_blank" class="btn btn-sm btn-outline-primary" style="font-size: 0.75rem;">Download Update</a>
+</div>
+
 <!-- Top Control & Status Bar -->
-<div class="control-bar mt-3">
+<div class="control-bar mt-2">
     <div class="d-flex align-items-center gap-3">
         <span class="section-label mb-0">Monitor Status:</span>
         @if (Model.IsMonitoring)
@@ -411,6 +417,24 @@
 
             profileSelect?.addEventListener('change', syncProfileCheckboxes);
             slider?.addEventListener('input', syncProfileCheckboxes);
+
+            // GitHub Releases Update Checker (ALI-CLIENT-UPDATE)
+            const currentAppVersion = "v1.0.0";
+            fetch("https://api.github.com/repos/intisor/Alify/releases/latest")
+                .then(res => res.ok ? res.json() : null)
+                .then(release => {
+                    if (release && release.tag_name && release.tag_name !== currentAppVersion) {
+                        const banner = document.getElementById("updateBanner");
+                        const tagSpan = document.getElementById("latestVersionTag");
+                        const link = document.getElementById("updateDownloadLink");
+                        if (banner && tagSpan && link) {
+                            tagSpan.textContent = release.tag_name;
+                            link.href = release.html_url || "https://github.com/intisor/Alify/releases/latest";
+                            banner.classList.remove("d-none");
+                        }
+                    }
+                })
+                .catch(() => {});
         });
     </script>
 }
