@@ -232,6 +232,11 @@ html, body {
 
 .queue-row {
   border-bottom: 1px solid #f2f2f2;
+  transition: background-color 0.15s ease;
+}
+
+.queue-row-flagged {
+  background-color: #fff5f5;
 }
 
 .queue-row:last-child {

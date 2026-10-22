@@ -24,6 +24,7 @@ namespace Alify.Core.Models
         public string? Lyrics { get; set; }
         public LyricMapping? MappedLyrics { get; set; }
         public bool IsFlagged { get; set; }
+        public string? FlagReason { get; set; }
     }
 
     /// <summary>
