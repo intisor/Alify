@@ -115,7 +115,7 @@ builder.Services.AddScoped<SpotifyService>(); // Changed from Singleton to Scope
 builder.Services.AddSingleton<SpotifyPlaybackMonitorService>();
 builder.Services.AddHostedService<SpotifyPlaybackMonitorService>(sp => sp.GetRequiredService<SpotifyPlaybackMonitorService>());
 builder.Services.Configure<PlaybackMonitorOptions>(options => {
-    options.PostSkipCheckDelayMs = 800;
+    options.PostSkipCheckDelayMs = 300;
     options.ActivePlaybackPollingIntervalMs = 4000;
 });
 

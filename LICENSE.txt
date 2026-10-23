@@ -1,21 +1,101 @@
-MIT License
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
 
-Copyright (c) [year] [fullname]
+Copyright (C) 2025 Alify. https://alify.org
+Everyone is permitted to copy and distribute verbatim copies of this license document, but changing it is not allowed.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Preamble
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The GNU General Public License is a free, copyleft license for software and other works. It is intended to guarantee your freedom to share and change all versions of a program--to make sure it remains free software for all its users. This License applies to most software and other works, and you can do anything with it except propagate or modify it without meeting these conditions. To protect your rights, we need to prevent others from denying you or others these rights or asking you to surrender the rights. Therefore, you have the responsibility to respect the freedom of others and to ensure that they can also share and change free software. This License is deliberately incompatible with the various kinds of non-copyleft licenses that are in common use. This License has been designed so that it works automatically and only requires each successive recipient to accept it. Anything licensed under the License is free software for the purposes of the GNU Definitions of Free Software and Open Source.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Section 0. Definitions.
+
+"Copyright" also includes copyright-like laws that apply to other kinds of works, such as semiconductor masks. "The Program" refers to any copyrightable work licensed under this License. Each licensee is addressed as "you". "Licensee" and "recipient" may be individuals or organizations. To "modify" a work means to copy from or adapt all or part of the work in a fashion requiring copyright permission other than making of a "substitution". Work "modifications" means a work derived from or based on the original work, as modified. The "Source" form of a work means the preferred form for making modifications to it. For an executable work, complete source code means all the source code for all modules it contains, plus any associated interface definition files, plus the scripts used to control compilation and installation of the executable. "Object code" means any non-source form of a work. "Standard Interface" means an Interface that either is an official standard defined by a recognized standards body, or, in specific cases, has historically been used by many applications in the same type of work to accomplish the same function. "System Libraries" of an executable work include, but are not limited to, shared libraries and dynamically linked sub-workspace, and other programs such as operating-system kernels or windowing systems, but exclusively exclude the work itself. "The Corresponding Source" for a work in source form is the same work. For an executable work, the Corresponding Source consists of all source code for all modules it contains, plus the scripts used to control compilation and installation of the executable. Activities other than copying, distribution and modification are not covered by this License; they are outside its scope. The act of running a program using the Interpreter is not prohibited, and output from such a program is covered only if its contents constitute a work based on the Program. Whether that is true depends on the Program's functionality and the Interpreter.
+
+Section 1. Source Code.
+
+The source code for a work means the preferred form for making modifications to it. For an executable work, complete source code means all the source code for all modules it contains, plus any associated interface definition files, plus the scripts used to control compilation and installation of the executable. The distributing organization must accompany the work with the source code or offer to provide the source code upon request.
+
+Section 2. Basic Permissions.
+
+All rights granted under this License are perpetual. Notwithstanding section 3, you have unlimited permission to run the unmodified Program. The output from running a covered work is covered by this License only if its contents constitute a work based on the Program. You may run covered works on that server.
+
+Section 3. Protecting Users' Legal Rights from Anti-Circumvention Law.
+
+No covered work shall be deemed part of an effective technological measure under any applicable law fulfilling obligations under the WIPO copyright treaty adopted on 20 December 2002, or similar laws prohibiting or restricting circumvention of such measures. When you convey a covered work, you waive any legal power to forbid circumvention of technological measures to the extent such circumvention is done by exercising rights under this License, and you disclaim any legal power to forbid circumvention of technological measures if the receipt of the Program or a work based on it would give you such power. You will, in any case, bear no legal responsibility for any user's failure to comply with the WIPO treaties or other laws.
+
+Section 4. Conveying Verbatim Copies.
+
+You may convey verbatim copies of the Program's source code as you receive it, in any medium, provided that you conspicuously and appropriately publish on each copy an appropriate copyright notice and the notice this License gives you the right to redistribute. You may charge a fee for the physical act of transferring the copy. You may offer warranty protection to some recipients, provided that you offer it to recipients in no condition less favorable than this License grants. You must cause all recipients to whom you convey the Program to receive this License.
+
+Section 5. Conveying Modified Source Versions.
+
+You may convey a work based on the Program, or the modifications to produce it from the Program, in the form of source code under the terms of section 4, provided that you meet these conditions:
+a) The work must carry prominent notices stating that you modified it, and give a relevant date.
+b) The work must carry prominent notices stating it is released under this License.
+c) You must license the entire work under this License.
+d) If the work has interactive user interfaces, each must display Appropriate Legal Notices.
+
+Section 6. Conveying Non-Source Forms.
+
+You may convey a work based on the Program in the form of object code under the terms of section 4, provided that you also convey the machine-readable Corresponding Source under the terms of this License, in one of these ways:
+a) Convey the object code in a physical product (including a physical distribution medium), accompanied by the Corresponding Source fixed on a durable physical medium.
+b) Convey the object code in electronic form, accompanied by the Corresponding Source, on a durable physical medium customarily used for software interchange.
+c) Convey the object code by offering access from a designated place (gratis or for a fee), and offer equivalent access to the Corresponding Source in the same way through the same site.
+d) Convey the object code by offering access from a designated place (gratis or for a fee), and ensure that the Corresponding Source is available to anyone who has access to the object code.
+
+It is not required to offer any title-fixing, trademarks, or logos. Nothing in this License shall be construed as excluding any implied warranties. You may not convey this work if you cannot conform to this License.
+
+Section 7. Additional Terms.
+
+Additional permissions that terminate upon modification or distribution of the Program, including additional rights, may be included in the original license file in the Work you received, but only as stated in the Work you received, and only for that Work. Additional permissions may be written to explicitly apply to other versions as written permission. When you convey a copy of a covered work, you may at your option remove any additional permissions from that copy, or you may place additional permissions in the material you distribute. You may, at your option, add additional permissions to material you develop yourself.
+
+Section 8. Termination.
+
+You may not propagate or modify a covered work except as expressly provided under this License. Any attempt otherwise to propagate or modify it is void, and will automatically terminate your rights under this License. However, if you cease all violation of this License, then your license from a particular copyright holder is reinstated (a) provisionally, unless and until the copyright holder explicitly and finally terminates your license, or (b) permanently, if the copyright holder fails to notify you of the violation by some reasonable means prior to 60 days after the cessation. Additionally, your rights from a particular copyright holder are reinstated permanently if the copyright holder notifies you of the violation by some reasonable means, this is the first time you have received notice of violation of this License for this work, and you cure the violation within 30 days after your receipt of notice. Termination of your rights under this section does not terminate the rights of all parties under this License. You are not required to accept this License, but nothing else grants you permission to modify or distribute the Program or its derivative works. An activity "for profit" means any activity predominantly motivated by commercial gain. You may convey a covered work non-commercially under the terms of this License. You may convey a covered work for profit under the terms of this License.
+
+Section 9. Future Revised Versions of this License.
+
+The Free Software Foundation may publish revised and/or new versions of the GNU General Public License from time to time. Such new versions will be similar in spirit to the present version, but may differ in detail. Such new versions will be given distinguishing versions. The author of a covered work may elect to follow either the version as published by the Free Software Foundation or a later version if the covered work is so designated in the relevant notice of this License. The Free Software Foundation may allow you to use newer versions of the License. The author of a covered work may elect to follow either the version as published by the Free Software Foundation or a later version if the covered work is so designated in the relevant notice of this License. The Free Software Foundation may allow you to use newer versions of the License. Some trademarks may not be covered by this License. You may not alter the original notice of this License.
+
+Section 10. Relicensing.
+
+In some circumstances, the author of a covered work may offer to relicense the work under different terms. The author of a covered work may offer to relicense the work under different terms, but only if such relicensing would not violate the terms of this License. In such cases, the author of a covered work may offer to relicense the work under different terms, and such relicensing is permitted only under the circumstances specified in this License.
+
+Section 11. No Miscarriage of Justice.
+
+If distribution and/or use of the Program is restricted in certain countries either by patents or by copyrighted interfaces, the original copyright holder may, at their discretion, make the Program available for distribution and/or use in those countries. If it is impossible to satisfy both this License and any other pertinent obligations, then the only way to satisfy this License is to completely stop distribution and use of the Program in those countries.
+
+Section 12. Use with the GNU Lesser General Public License.
+
+You may place a copy of the Program under the GNU Lesser General Public License instead of this License, provided that you meet the conditions of the GNU Lesser General Public License.
+
+Section 13. Detrimental Reliance.
+
+If the Program as distributed under this License has been modified or combined with other software and the combination is then distributed under the terms of this License, the recipient must be provided with the opportunity to re-execute the combination under the terms of this License.
+
+Section 14. If a provision of this License is invalid.
+
+If any provision of this License is invalid or unenforceable under applicable law, the rest of this License will continue in effect, and the invalid or unenforceable provision will be replaced with a valid and enforceable provision that most nearly approximates the original intent.
+
+Section 15. End of License.
+
+If you cannot distribute the Program under this License, you must cease all distribution and use of the Program.
+
+END OF TERMS AND CONDITIONS
+
+How to apply this License to your work.
+
+To apply the GNU General Public License to your work, attach the following notice to the work. It is safest to attach it to the beginning of the source files, and to each file of the Program that has the most independent significance. If the program as you distribute it is a graphical interface, it is safest to put the notice somewhere in the program as a whole.
+
+Also add information on where the notice can be found in the Program, in case it gets separated from the notice. You may add a copyright notice of your own, and may have other additional notices, either of a similar kind, or as additional permissive licenses. Please, do not add any other restrictions on the Program's use, or on its user's ability to run, modify, or distribute the Program and its works, except as permitted above.
+
+            Alify
+            Copyright (C) 2025  Alify Authors
+            https://alify.org
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see https://www.gnu.org/licenses/>.
