@@ -27,13 +27,17 @@
             <div class="d-inline-flex flex-column align-items-center gap-3 p-4 border rounded-1 bg-white" style="border-color: var(--border-light) !important; min-width: 320px;">
                 <p class="text-muted small mb-2">Connect your Spotify account to inspect queue and active playback</p>
                 <form method="post" asp-page-handler="Login" class="w-100">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="byokClientId" name="byokClientId" placeholder="e.g. ABCD1234EFGH5678 (optional)">
+                        <label for="byokClientId">Bring Your Own Keys: Spotify Client ID</label>
+                        <small class="text-muted">Leave blank to use configured Client ID. Each user provides their own ID to avoid Spotify's 5-user cap.</small>
+                    </div>
                     <button type="submit" class="btn-flat w-100">
                         Connect with Spotify
                     </button>
                 </form>
             </div>
         }
-    </div>
 
     <!-- Feature Highlights: Flat 3-column grid -->
     <div class="row g-3">
@@ -56,4 +60,4 @@
             </div>
         </div>
     </div>
-</div>
+</div>

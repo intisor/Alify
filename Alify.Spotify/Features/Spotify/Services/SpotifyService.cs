@@ -83,12 +83,13 @@ public class SpotifyService
     /// This initiates the OAuth 2.0 Authorization Code Flow which is recommended for 
     /// long-running applications where a user logs in once and the app maintains access.
     /// </remarks>
-    public string StartAuth()
-    {
-        // Determine Client ID: use user-provided ID if BYOK is enabled, otherwise use configured ClientId
-        string clientId = _spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
-            ? _spotifyOptions.ClientId  // User will provide this at auth time via UI
-            : (_spotifyOptions.ClientId ?? string.Empty);
+    public string StartAuth(string? clientIdOverride = null)
+    {        // Determine Client ID: use override if provided (BYOK), otherwise use configured ClientId
+        string clientId = !string.IsNullOrEmpty(clientIdOverride)
+            ? clientIdOverride
+            : (_spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
+                ? _spotifyOptions.ClientId  // User will provide this at auth time via UI
+                : (_spotifyOptions.ClientId ?? string.Empty));
         // Determine redirect URI: use configured default or dynamic host if accessed via domain/tunnel
         var redirectUri = _spotifyOptions.RedirectUri ?? "http://127.0.0.1:5001/callback";
         var httpContext = _httpContextAccessor.HttpContext;
