@@ -26,7 +26,7 @@ class FilterEngine(
     var strictness: Int = 10,
     var filterExplicit: Boolean = false,
     var enableGemini: Boolean = true,
-    var geminiApiKey: String = "AIzaSyBEhdVCtri2j6YrF1hAKdZnPk6crcBy1CQ"
+    var geminiApiKey: String = ""
 ) {
     private val httpClient = OkHttpClient()
 

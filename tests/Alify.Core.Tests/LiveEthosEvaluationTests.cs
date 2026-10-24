@@ -10,8 +10,8 @@ namespace Alify.Core.Tests;
 public class LiveEthosEvaluationTests
 {
     private readonly ITestOutputHelper _output;
-    private const string GEMINI_API_KEY = "AIzaSyBEhdVCtri2j6YrF1hAKdZnPk6crcBy1CQ";
-    private static bool LiveTestsEnabled => Environment.GetEnvironmentVariable("ALIFY_LIVE_TESTS") == "1";
+    private static string GeminiApiKey => Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? "";
+    private static bool LiveTestsEnabled => Environment.GetEnvironmentVariable("ALIFY_LIVE_TESTS") == "1" && !string.IsNullOrEmpty(GeminiApiKey);
 
     public LiveEthosEvaluationTests(ITestOutputHelper output)
     {
@@ -29,7 +29,7 @@ public class LiveEthosEvaluationTests
     {
         if (!LiveTestsEnabled) return;
         using var httpClient = new HttpClient();
-        var client = new HttpGeminiModelClient(httpClient, GEMINI_API_KEY, "gemini-2.5-flash");
+        var client = new HttpGeminiModelClient(httpClient, GeminiApiKey, "gemini-2.5-flash");
         var engine = new GeminiStanceAnalysisEngine(client, ProviderConsent.Granted("gemini-2.5-flash"), new BudgetLedger(100));
 
         // Actual scraped lyrics of Naira Marley - Aye
@@ -103,7 +103,7 @@ public class LiveEthosEvaluationTests
     {
         if (!LiveTestsEnabled) return;
         using var httpClient = new HttpClient();
-        var client = new HttpGeminiModelClient(httpClient, GEMINI_API_KEY, "gemini-2.5-flash");
+        var client = new HttpGeminiModelClient(httpClient, GeminiApiKey, "gemini-2.5-flash");
         var engine = new GeminiStanceAnalysisEngine(client, ProviderConsent.Granted("gemini-2.5-flash"), new BudgetLedger(100));
 
         // Clean, wholesome, motivational lyrics
