@@ -170,32 +170,71 @@ class FilterEngine(
             }
         """.trimIndent()
 
-        val jsonPayload = JSONObject().apply {
-            put("contents", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("text", prompt)
+        val isOpKey = geminiApiKey.startsWith("sk-") || geminiApiKey.startsWith("gsk_")
+        val request = if (isOpKey) {
+            val url = if (geminiApiKey.startsWith("gsk_")) {
+                "https://api.groq.com/openai/v1/chat/completions"
+            } else {
+                "https://openrouter.ai/api/v1/chat/completions"
+            }
+            val model = if (geminiApiKey.startsWith("gsk_")) {
+                "llama-3.3-70b-versatile"
+            } else {
+                "openrouter/free"
+            }
+
+            val payload = JSONObject().apply {
+                put("model", model)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", prompt)
+                    })
+                })
+                put("temperature", 0.1)
+            }
+
+            Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $geminiApiKey")
+                .header("HTTP-Referer", "https://github.com/intisor/Alify")
+                .header("X-Title", "Alify Music Filter")
+                .post(payload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+        } else {
+            val jsonPayload = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", prompt)
+                            })
                         })
                     })
                 })
-            })
-        }
+            }
 
-        val request = Request.Builder()
-            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey")
-            .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+            Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey")
+                .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+        }
 
         try {
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
                 val body = response.body?.string() ?: return@withContext null
                 val root = JSONObject(body)
-                val candidates = root.optJSONArray("candidates") ?: return@withContext null
-                if (candidates.length() == 0) return@withContext null
-                val content = candidates.getJSONObject(0).getJSONObject("content")
-                val text = content.getJSONArray("parts").getJSONObject(0).getString("text")
+
+                val text = if (isOpKey) {
+                    val choices = root.optJSONArray("choices") ?: return@withContext null
+                    if (choices.length() == 0) return@withContext null
+                    choices.getJSONObject(0).getJSONObject("message").getString("content")
+                } else {
+                    val candidates = root.optJSONArray("candidates") ?: return@withContext null
+                    if (candidates.length() == 0) return@withContext null
+                    candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+                }
 
                 val cleanJson = text.replace("```json", "").replace("```", "").trim()
                 val parsed = JSONObject(cleanJson)

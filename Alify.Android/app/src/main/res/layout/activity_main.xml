@@ -146,16 +146,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="Enable Gemini 2.5 Flash scanning"
+                    android:text="Enable AI semantic scanning"
                     android:textColor="@color/spotify_light_text" />
 
-                <!-- BYOK Gemini API Key Input -->
+                <!-- BYOK AI API Key Input -->
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/tilGeminiApiKey"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="Gemini API Key (BYOK - Optional)"
+                    android:hint="AI API Key (BYOK: Gemini, OpenRouter, Groq)"
+                    app:helperText="Supports Google Gemini (AIza...), OpenRouter (sk-...), Groq (gsk_...)"
+                    app:helperTextColor="@color/spotify_sub_text"
                     app:boxBackgroundColor="@color/spotify_dark_card"
                     app:boxCornerRadiusBottomEnd="8dp"
                     app:boxCornerRadiusBottomStart="8dp"

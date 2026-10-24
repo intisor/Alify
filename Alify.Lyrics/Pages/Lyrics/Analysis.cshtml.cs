@@ -97,17 +97,31 @@ public class AnalysisModel : PageModel
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            ErrorMessage = "A Gemini API key is required for BYOK analysis.";
+            ErrorMessage = "An AI API key is required for BYOK analysis (Gemini, OpenRouter, or Groq).";
             return Page();
         }
 
         if (!userConsent)
         {
-            ErrorMessage = "You must explicitly consent to transmitting lyrics to Google Gemini.";
+            ErrorMessage = "You must explicitly consent to transmitting lyrics to the external AI provider.";
             return Page();
         }
 
-        var client = new MsccGeminiModelClient(apiKey.Trim());
+        var trimmedKey = apiKey.Trim();
+        IGeminiModelClient client;
+        if (trimmedKey.StartsWith("gsk_", StringComparison.OrdinalIgnoreCase))
+        {
+            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "llama-3.3-70b-versatile", OpenAiCompatibleModelClient.DefaultGroqEndpoint);
+        }
+        else if (trimmedKey.StartsWith("sk-", StringComparison.OrdinalIgnoreCase))
+        {
+            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "meta-llama/llama-3.3-70b-instruct:free", OpenAiCompatibleModelClient.DefaultOpenRouterEndpoint);
+        }
+        else
+        {
+            client = new MsccGeminiModelClient(trimmedKey);
+        }
+
         var consent = ProviderConsent.Granted(client.ModelName);
         var engine = new GeminiStanceAnalysisEngine(client, consent, _budgetLedger);
 
@@ -121,11 +135,11 @@ public class AnalysisModel : PageModel
 
         if (LatestAnalysis.Status == AnalysisStatus.Completed)
         {
-            StatusMessage = "Gemini structured stance analysis completed and saved to ledger.";
+            StatusMessage = $"{client.ModelName} structured stance analysis completed and saved to ledger.";
         }
         else
         {
-            ErrorMessage = $"Gemini analysis returned {LatestAnalysis.Status}: {LatestAnalysis.ReasonCode}";
+            ErrorMessage = $"{client.ModelName} analysis returned {LatestAnalysis.Status}: {LatestAnalysis.ReasonCode}";
         }
 
         return Page();

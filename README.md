@@ -52,6 +52,16 @@ Alify is a local-first application designed with strict separation of concerns i
 
 ---
 
+## Bring Your Own Key (BYOK) Guide
+
+Alify is completely decentralized and private. You do not need to share accounts, pay for managed subscriptions, or rely on a centralized backend:
+- **Spotify Developer App**: Avoid Spotify's 25-user development whitelist limitation by connecting your personal Spotify Client ID.
+- **Multi-Provider AI**: Bring your own key for **Google Gemini**, **OpenRouter** (free models), **Groq** (free LPU speed), or run completely offline with **Local Ollama**.
+
+👉 **[Read the complete step-by-step BYOK Guide](BYOK_GUIDE.md)** for detailed setup instructions with screenshots and URLs.
+
+---
+
 ## Quick Start & Running Locally
 
 ### Prerequisites

@@ -154,25 +154,30 @@
                     </form>
                 </div>
 
-                <!-- Gemini BYOK Toggle Form -->
+                <!-- AI BYOK Toggle Form -->
                 <details style="border-top: 1px solid #e2e8f0; padding-top: 0.75rem;">
                     <summary style="font-size: 0.875rem; font-weight: 600; color: #475569; cursor: pointer;">
-                        Optional: Run Google Gemini BYOK Model (Remaining Budget: @Model.RemainingBudget)
+                        Optional: Run AI BYOK Model (Gemini / OpenRouter / Groq) (Remaining Budget: @Model.RemainingBudget)
                     </summary>
                     <form method="post" asp-page-handler="RunGemini" style="margin-top: 0.75rem;">
                         <input type="hidden" name="sourceId" value="@Model.SourceRecord?.SourceId" />
                         <div style="margin-bottom: 0.5rem;">
-                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Gemini API Key</label>
-                            <input type="password" name="apiKey" style="width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" placeholder="AIzaSy..." required />
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">
+                                AI API Key (Gemini <code style="font-size: 0.75rem;">AIza...</code>, OpenRouter <code style="font-size: 0.75rem;">sk-...</code>, or Groq <code style="font-size: 0.75rem;">gsk_...</code>)
+                            </label>
+                            <input type="password" name="apiKey" style="width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; box-sizing: border-box;" placeholder="Enter Gemini, OpenRouter, or Groq key" required />
+                            <small style="display: block; font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
+                                Need a free API key? See our <a href="https://github.com/intisor/Alify/blob/master/BYOK_GUIDE.md" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline;">BYOK Setup Guide</a>.
+                            </small>
                         </div>
                         <div style="margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.5rem;">
                             <input type="checkbox" name="userConsent" value="true" id="userConsent" required style="margin-top: 0.2rem;" />
                             <label for="userConsent" style="font-size: 0.75rem; color: #64748b; line-height: 1.3;">
-                                I consent to transmitting normalized lyrics to Google Gemini for stance interpretation. No Spotify tokens or private IDs are sent.
+                                I consent to transmitting normalized lyrics to the selected AI provider for stance interpretation. No Spotify tokens or private IDs are sent.
                             </label>
                         </div>
                         <button type="submit" style="background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
-                            Execute Gemini Analysis
+                            Execute AI Stance Analysis
                         </button>
                     </form>
                 </details>
