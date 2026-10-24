@@ -157,7 +157,7 @@
                     android:layout_marginTop="8dp"
                     android:hint="AI API Key (BYOK: Gemini, OpenRouter, Groq)"
                     app:helperText="Supports Google Gemini (AIza...), OpenRouter (sk-...), Groq (gsk_...)"
-                    app:helperTextColor="@color/spotify_sub_text"
+                    app:helperTextTextColor="@color/spotify_sub_text"
                     app:boxBackgroundColor="@color/spotify_dark_card"
                     app:boxCornerRadiusBottomEnd="8dp"
                     app:boxCornerRadiusBottomStart="8dp"
