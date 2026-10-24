@@ -116,17 +116,36 @@ class FilterEngine(
         lyrics: String
     ): FilterResult? = withContext(Dispatchers.IO) {
         val prompt = """
-            You are a content evaluation engine for the worldview: $profile with strictness: $strictness/10.
+            You are an expert computational sociolinguist, dialect forensic analyst, and lyrical content auditor.
+            Worldview Ethos Profile: $profile with Strictness: $strictness/10.
             Song: "$trackName" by "$artistName".
-            Analyze the following lyrics (including non-English slang, Yoruba, Pidgin, idioms):
-            
-            ${lyrics.take(3000)}
-            
-            Evaluate if this song promotes or contains severe vulgarity, violence, intoxicants, or blasphemy for the selected ethos.
-            Respond in valid JSON only:
+
+            EVALUATION PROTOCOL:
+            1. Slang & Dialect De-cloaking:
+               Identify and decode non-standard dialects, regional street slang, idioms, and code-switching across any language or subculture.
+               Evaluate the operational subcultural meaning in adult/club contexts rather than literal dictionary definitions.
+            2. Camouflage Stripping:
+               - Kinetic/Dance Decoys: Scrutinize movement and rhythm verbs where omitted direct objects refer to physical anatomy, twerking, or intimate contact.
+               - Sensory/Consumption Metaphors: Examine eating, tasting, licking, or sweet food references used as euphemisms for sexual gratification.
+               - Transactional Dynamics: Detect framing where physical intimacy is exchanged for money, status, or luxury gifts.
+               - Compliment Decoys: Strip away polite flattery or conscious themes if the core operative bars drive toward physical arousal, vulgarity, or illicit acts.
+            3. Unmasked English Equivalence:
+               If the unvarnished meaning of any passage would warrant daytime radio censorship, commercial broadcast beeping, or an explicit/18+ advisory in plain English, it violates the policy.
+            4. ZERO-TOLERANCE SINGLE-VERSE RULE:
+               CRITICAL: Even if ONLY A SINGLE LINE OR VERSE violates the ethos ($profile), the ENTIRE song MUST be flagged (flagged=true). Never forgive or excuse a single explicit line because the chorus or rest of the track is clean.
+
+            Lyrics to Audit:
+            ${lyrics.take(3500)}
+
+            Respond strictly in valid JSON without markdown:
             {
-              "flagged": true/false,
-              "reason": "short explanation"
+              "flagged": true,
+              "reason": "Cite the exact offending line, its decoded meaning, and the ethos violation"
+            }
+            or if completely clean:
+            {
+              "flagged": false,
+              "reason": "Clean"
             }
         """.trimIndent()
 

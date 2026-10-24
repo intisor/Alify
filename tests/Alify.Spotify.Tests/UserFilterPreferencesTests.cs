@@ -17,14 +17,14 @@ public class UserFilterPreferencesTests
     {
         var prefs = new UserFilterPreferences();
 
-        Assert.True(prefs.FilterSpotifyExplicit);
+        Assert.False(prefs.FilterSpotifyExplicit);
         Assert.True(prefs.FilterViolenceEndorsed);
         Assert.False(prefs.FilterViolenceMentioned);
         Assert.True(prefs.FilterSubstanceEndorsed);
         Assert.False(prefs.FilterSubstanceMentioned);
 
         var policy = prefs.ToPolicyPreferences();
-        Assert.True(policy.ExplicitFilterOptIn);
+        Assert.False(policy.ExplicitFilterOptIn);
         Assert.Contains(Stance.Endorsed, policy.TriggerStancesByTopic["Violence"]);
         Assert.DoesNotContain(Stance.Mentioned, policy.TriggerStancesByTopic["Violence"]);
         Assert.Contains(Stance.Endorsed, policy.TriggerStancesByTopic["SubstanceUse"]);
@@ -140,7 +140,7 @@ public class UserFilterPreferencesTests
 
         // Initial default
         var initialPrefs = queueService.GetUserFilterPreferences(userId);
-        Assert.True(initialPrefs.FilterSpotifyExplicit);
+        Assert.False(initialPrefs.FilterSpotifyExplicit);
         Assert.False(initialPrefs.FilterViolenceMentioned);
 
         // Populate a queue in cache
@@ -150,7 +150,7 @@ public class UserFilterPreferencesTests
         // Update preferences
         var newPrefs = new UserFilterPreferences
         {
-            FilterSpotifyExplicit = false,
+            FilterSpotifyExplicit = true,
             FilterViolenceMentioned = true,
             FilterSubstanceMentioned = true
         };
@@ -158,7 +158,7 @@ public class UserFilterPreferencesTests
 
         // Verify preferences persisted
         var savedPrefs = queueService.GetUserFilterPreferences(userId);
-        Assert.False(savedPrefs.FilterSpotifyExplicit);
+        Assert.True(savedPrefs.FilterSpotifyExplicit);
         Assert.True(savedPrefs.FilterViolenceMentioned);
         Assert.True(savedPrefs.FilterSubstanceMentioned);
 
@@ -176,7 +176,7 @@ public class UserFilterPreferencesTests
             StrictnessLevel = 5
         }.ToPolicyPreferences();
 
-        Assert.True(islamicStandard.ExplicitFilterOptIn);
+        Assert.False(islamicStandard.ExplicitFilterOptIn);
         Assert.Contains(Stance.Endorsed, islamicStandard.TriggerStancesByTopic["Blasphemy"]);
         Assert.DoesNotContain(Stance.Mentioned, islamicStandard.TriggerStancesByTopic["Blasphemy"]);
         Assert.Contains(Stance.Endorsed, islamicStandard.TriggerStancesByTopic["SubstanceUse"]);
@@ -203,7 +203,7 @@ public class UserFilterPreferencesTests
             StrictnessLevel = 4
         }.ToPolicyPreferences();
 
-        Assert.True(christianStandard.ExplicitFilterOptIn);
+        Assert.False(christianStandard.ExplicitFilterOptIn);
         Assert.Contains(Stance.Endorsed, christianStandard.TriggerStancesByTopic["Blasphemy"]);
         Assert.Contains(Stance.Endorsed, christianStandard.TriggerStancesByTopic["Occult"]);
         Assert.DoesNotContain(Stance.Mentioned, christianStandard.TriggerStancesByTopic["Occult"]);
@@ -228,7 +228,7 @@ public class UserFilterPreferencesTests
             StrictnessLevel = 5
         }.ToPolicyPreferences();
 
-        Assert.True(familyPrefs.ExplicitFilterOptIn);
+        Assert.False(familyPrefs.ExplicitFilterOptIn);
         Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["Violence"]);
         Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["SubstanceUse"]);
         Assert.Contains(Stance.Endorsed, familyPrefs.TriggerStancesByTopic["Vulgarity"]);

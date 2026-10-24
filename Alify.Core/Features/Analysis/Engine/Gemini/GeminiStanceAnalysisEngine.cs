@@ -119,28 +119,42 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
     private static string BuildStructuredPrompt(SourceVersion source, string language, FilterProfile profile = FilterProfile.General, int strictnessLevel = 5)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are an advanced lyrical content analysis engine.");
+        sb.AppendLine("You are an expert computational sociolinguist, dialect forensic analyst, and lyrical content analysis engine.");
         sb.AppendLine($"Worldview Ethos Profile: {profile}. Strictness Level: {strictnessLevel} of 10.");
         sb.AppendLine("Analyze the provided song lyrics line by line for stances on topics: 'violence', 'substance_use', 'blasphemy', 'sexual_content', 'occult', 'profanity'.");
         
         if (profile == FilterProfile.Islamic)
         {
-            sb.AppendLine("Islamic Ethos Focus: Rigorously examine for Shirk/Blasphemy, Intoxicants/Alcohol (Khamr), Sexual Explicitness/Fahisha, and Violence.");
+            sb.AppendLine("Islamic Ethos Focus: Rigorously examine for Shirk/Blasphemy, Intoxicants/Alcohol (Khamr), Sexual Explicitness/Fahisha (including coded bedroom innuendo), and Violence.");
         }
         else if (profile == FilterProfile.Christian)
         {
-            sb.AppendLine("Christian Ethos Focus: Rigorously examine for Blasphemy/taking the Lord's name in vain, Demonic/Occult glorification, Sexual Immorality, and Violence.");
+            sb.AppendLine("Christian Ethos Focus: Rigorously examine for Blasphemy/taking the Lord's name in vain, Demonic/Occult glorification, Sexual Immorality/Lust, and Violence.");
         }
         else if (profile == FilterProfile.FamilyFriendly)
         {
-            sb.AppendLine("Family-Friendly Focus: Strictly identify vulgarity, sexual references, drug use, and violence.");
+            sb.AppendLine("Family-Friendly Focus: Strictly identify vulgarity, sexual innuendo/references, drug use, and violence.");
         }
 
         sb.AppendLine($"Strictness guidance: {strictnessLevel}/10 (1=lenient: only gratuitous glorification flagged; 5=standard; 10=strict zero-tolerance: any mention, storytelling, or ambiguous allusion must be flagged).");
+        sb.AppendLine();
+        sb.AppendLine("FORENSIC SUBTEXT & DE-CLOAKING PROTOCOL:");
+        sb.AppendLine("1. Dialect & Slang De-cloaking: Scrutinize non-standard dialects, regional street slang, idioms, and code-switching across any language or subculture. Reject literal dictionary translations; determine the operational subcultural meaning in adult/club contexts.");
+        sb.AppendLine("2. Camouflage Stripping:");
+        sb.AppendLine("   - Kinetic/Dance Decoys: Scrutinize movement and rhythm verbs where omitted direct objects refer to physical anatomy, twerking, or intimate contact.");
+        sb.AppendLine("   - Consumption Metaphors: Examine eating, tasting, licking, or sweet food references used as euphemisms for sexual gratification.");
+        sb.AppendLine("   - Transactional Dynamics: Detect framing where physical intimacy is exchanged for money, status, or luxury gifts.");
+        sb.AppendLine("   - Compliment Decoys: Strip away polite flattery or conscious themes if the core operative bars drive toward physical arousal, vulgarity, or illicit acts.");
+        sb.AppendLine("3. Unmasked English Equivalence: If the unvarnished meaning of any passage would warrant daytime radio censorship, commercial broadcast beeping, or an explicit/18+ advisory in plain English, it MUST be flagged.");
+        sb.AppendLine();
+        sb.AppendLine("CRITICAL SINGLE-VERSE ZERO-TOLERANCE RULE:");
+        sb.AppendLine("Even if ONLY A SINGLE LINE OR VERSE violates the ethos, you MUST report it as a finding with Stance 'Endorsed' or 'Mentioned'. In Alify's policy engine, a single offending verse causes the ENTIRE song to be flagged and skipped. Never excuse, average out, or ignore a single explicit verse simply because the surrounding verses or chorus are clean.");
+        sb.AppendLine();
+        sb.AppendLine("CRITICAL EVIDENCE RULE:");
+        sb.AppendLine("In the 'evidence' array, 'quotedText' MUST BE THE EXACT verbatim text from the numbered lyric line below (required for cryptographic ledger verification). Put your unmasked English explanation and dialect breakdown in the 'rationale' field.");
         sb.AppendLine("For each topic present, determine the Stance: 'Endorsed', 'Mentioned', 'Rejected', or 'Ambiguous'.");
         sb.AppendLine("Determine Expression: 'Literal', 'Figurative', or 'Unknown'.");
-        sb.AppendLine("CRITICAL RULE: Every finding MUST include verifiable Evidence citations referencing the exact 1-based StartLine, EndLine, and exact QuotedText from the lines below.");
-        sb.AppendLine("Do not invent, hallucinate, or rewrite quotes. Output strictly valid JSON conforming to the schema without markdown formatting.");
+        sb.AppendLine("Output strictly valid JSON conforming to the schema without markdown formatting.");
         sb.AppendLine();
         sb.AppendLine("JSON Schema:");
         sb.AppendLine(@"{
@@ -148,10 +162,10 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
   ""findings"": [
     {
       ""findingId"": ""f-1"",
-      ""topic"": ""violence"",
+      ""topic"": ""sexual_content"",
       ""stance"": ""Endorsed"",
-      ""expression"": ""Literal"",
-      ""rationale"": ""Detailed rationale"",
+      ""expression"": ""Figurative"",
+      ""rationale"": ""Detailed sociolinguistic breakdown and unmasked English equivalent"",
       ""confidence"": 0.95,
       ""evidence"": [
         { ""startLine"": 1, ""endLine"": 1, ""quotedText"": ""exact quoted text"" }

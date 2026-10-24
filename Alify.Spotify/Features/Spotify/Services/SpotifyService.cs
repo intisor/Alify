@@ -84,7 +84,8 @@ public class SpotifyService
     /// long-running applications where a user logs in once and the app maintains access.
     /// </remarks>
     public string StartAuth(string? clientIdOverride = null)
-    {        // Determine Client ID: use override if provided (BYOK), otherwise use configured ClientId
+    {
+        // Determine Client ID: use override if provided (BYOK), otherwise use configured ClientId
         string clientId = !string.IsNullOrEmpty(clientIdOverride)
             ? clientIdOverride
             : (_spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
@@ -112,6 +113,7 @@ public class SpotifyService
         var codeVerifier = PkceUtil.GenerateCodeVerifier();
         var codeChallenge = PkceUtil.GenerateCodeChallenge(codeVerifier);
         Session.SetString("SpotifyCodeVerifier", codeVerifier);
+        Session.SetString("SpotifyClientId", clientId);
 
         // Create the authorization request with least-privilege scopes and PKCE S256 challenge
         var loginRequest = new LoginRequest(new Uri(redirectUri), clientId, LoginRequest.ResponseType.Code)
@@ -140,21 +142,27 @@ public class SpotifyService
         if (string.IsNullOrEmpty(storedState) || state != storedState)
         {
             return false;
-        }
+        }
+
         var codeVerifier = Session.GetString("SpotifyCodeVerifier");
         if (string.IsNullOrEmpty(codeVerifier))
         {
             return false;
-        }
-        var redirectUri = Session.GetString("SpotifyRedirectUri") ?? _spotifyOptions.RedirectUri!;
+        }
+
+        var redirectUri = Session.GetString("SpotifyRedirectUri") ?? _spotifyOptions.RedirectUri!;
+
         // State and verifier are single-use, remove them from session
         Session.Remove("SpotifyState");
         Session.Remove("SpotifyCodeVerifier");
-        Session.Remove("SpotifyRedirectUri");
+        Session.Remove("SpotifyRedirectUri");
+
         // Determine Client ID: use configured ClientId or, if BYOK enabled, the user-provided ID
-        string authClientId = _spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
-            ? _spotifyOptions.ClientId
-            : (_spotifyOptions.ClientId ?? string.Empty);
+        string authClientId = Session.GetString("SpotifyClientId")
+            ?? (_spotifyOptions.UseByok && !string.IsNullOrEmpty(_spotifyOptions.ClientId)
+                ? _spotifyOptions.ClientId
+                : (_spotifyOptions.ClientId ?? string.Empty));
+
         // Exchange the authorization code for access and refresh tokens via PKCE (no client secret needed)
         var tokenResponse = await new OAuthClient().RequestToken(new PKCETokenRequest(
             authClientId,
@@ -169,6 +177,7 @@ public class SpotifyService
         Session.SetString("SpotifyAccessToken", tokenResponse.AccessToken);
         Session.SetString("SpotifyRefreshToken", tokenResponse.RefreshToken ?? "");
         Session.SetString("SpotifyTokenExpiry", expiry.ToString("o"));
+        Session.SetString("SpotifyClientId", authClientId);
 
         // Store the access token in IMemoryCache for background services
         _cache.Set("SpotifyAuthToken", tokenResponse.AccessToken, TimeSpan.FromHours(1));
@@ -178,6 +187,7 @@ public class SpotifyService
         {
             var authData = new SpotifyAuthData
             {
+                ClientId = authClientId,
                 AccessToken = tokenResponse.AccessToken,
                 RefreshToken = tokenResponse.RefreshToken,
                 ExpiresAtUtc = expiry,
@@ -270,9 +280,13 @@ public class SpotifyService
 
         try
         {
+            string activeClientId = Session.GetString("SpotifyClientId")
+                ?? (_tokenStore != null ? (await _tokenStore.GetTokensAsync())?.ClientId : null)
+                ?? _spotifyOptions.ClientId!;
+
             // Request a new access token using the refresh token via PKCE (no client secret needed)
             var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
-                _spotifyOptions.ClientId!,
+                activeClientId,
                 refreshToken
             ));
 
@@ -301,6 +315,7 @@ public class SpotifyService
                 var stored = await _tokenStore.GetTokensAsync();
                 var updatedData = new SpotifyAuthData
                 {
+                    ClientId = activeClientId,
                     AccessToken = newResponse.AccessToken,
                     RefreshToken = updatedRefreshToken,
                     ExpiresAtUtc = expiry,
@@ -361,6 +376,10 @@ public class SpotifyService
                         Session.SetString("SpotifyAccessToken", stored.AccessToken);
                         Session.SetString("SpotifyRefreshToken", stored.RefreshToken);
                         Session.SetString("SpotifyTokenExpiry", stored.ExpiresAtUtc.ToString("o"));
+                        if (!string.IsNullOrEmpty(stored.ClientId))
+                        {
+                            Session.SetString("SpotifyClientId", stored.ClientId);
+                        }
                         if (!string.IsNullOrEmpty(stored.UserId))
                         {
                             Session.SetString("SpotifyUserId", stored.UserId);
@@ -372,11 +391,12 @@ public class SpotifyService
                     return true;
                 }
 
+                var activeClientId = stored.ClientId ?? _spotifyOptions.ClientId!;
                 // Stored access token is expired; refresh it silently using the persistent refresh token
                 try
                 {
                     var newResponse = await new OAuthClient().RequestToken(new PKCETokenRefreshRequest(
-                        _spotifyOptions.ClientId!,
+                        activeClientId,
                         stored.RefreshToken
                     ));
 
@@ -389,6 +409,7 @@ public class SpotifyService
 
                         var updatedData = new SpotifyAuthData
                         {
+                            ClientId = activeClientId,
                             AccessToken = newResponse.AccessToken,
                             RefreshToken = newRefreshToken,
                             ExpiresAtUtc = newExpiry,
@@ -400,6 +421,7 @@ public class SpotifyService
 
                         try
                         {
+                            Session.SetString("SpotifyClientId", activeClientId);
                             Session.SetString("SpotifyAccessToken", newResponse.AccessToken);
                             Session.SetString("SpotifyRefreshToken", newRefreshToken);
                             Session.SetString("SpotifyTokenExpiry", newExpiry.ToString("o"));

@@ -5,6 +5,7 @@ namespace Alify.Core.Infrastructure.Security;
 /// </summary>
 public record SpotifyAuthData
 {
+    public string? ClientId { get; init; }
     public required string AccessToken { get; init; }
     public required string RefreshToken { get; init; }
     public required DateTime ExpiresAtUtc { get; init; }

@@ -25,7 +25,11 @@ public class IndexModel : PageModel
 
         IsAuthenticated = false;
         return Page();
-    }public IActionResult OnPostLogin(string byokClientId = null)    {        try        {            var loginUrl = _spotifyService.StartAuth(byokClientId);
+    }public IActionResult OnPostLogin(string? byokClientId = null)
+    {
+        try
+        {
+            var loginUrl = _spotifyService.StartAuth(byokClientId);
             _logger.LogInformation("Starting Spotify login BYOK={UseByok} ClientId={ClientId}", !string.IsNullOrEmpty(byokClientId), byokClientId);
             return Redirect(loginUrl);
         }
@@ -34,7 +38,8 @@ public class IndexModel : PageModel
             _logger.LogError(ex, "Error starting Spotify authentication");
             TempData["ErrorMessage"] = "Failed to start Spotify login. Please try again.";
             return RedirectToPage();
-        }    }
+        }
+    }
 
     public IActionResult OnPostLogout()
     {

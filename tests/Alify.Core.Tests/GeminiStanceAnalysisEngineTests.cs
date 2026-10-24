@@ -229,4 +229,33 @@ public class GeminiStanceAnalysisEngineTests
         Assert.Equal(1, budget.CompletedCount);
         Assert.Equal(9, budget.RemainingCapacity);
     }
+
+    [Fact]
+    public async Task AnalyzeAsync_ConstructsForensicSubtextPromptWithSingleVerseRule()
+    {
+        string? capturedPrompt = null;
+        var client = new FakeGeminiClient
+        {
+            ResponseProvider = prompt =>
+            {
+                capturedPrompt = prompt;
+                return Task.FromResult(@"{ ""findings"": [] }");
+            }
+        };
+        var consent = ProviderConsent.Granted();
+        var budget = new BudgetLedger(10);
+        var engine = new GeminiStanceAnalysisEngine(client, consent, budget);
+
+        var source = CreateSampleSource("Only you, see wetin you carry", "Fun ran ni bi sokoto baggy");
+        var result = await engine.AnalyzeAsync(source, targetLanguage: "en", profile: Alify.Core.Features.Analysis.Policy.FilterProfile.Islamic, strictnessLevel: 8);
+
+        Assert.Equal(AnalysisStatus.Completed, result.Status);
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("FORENSIC SUBTEXT & DE-CLOAKING PROTOCOL", capturedPrompt);
+        Assert.Contains("Kinetic/Dance Decoys", capturedPrompt);
+        Assert.Contains("Unmasked English Equivalence", capturedPrompt);
+        Assert.Contains("CRITICAL SINGLE-VERSE ZERO-TOLERANCE RULE", capturedPrompt);
+        Assert.Contains("Worldview Ethos Profile: Islamic", capturedPrompt);
+        Assert.Contains("Strictness Level: 8 of 10", capturedPrompt);
+    }
 }

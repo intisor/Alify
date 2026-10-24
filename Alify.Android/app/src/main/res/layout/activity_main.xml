@@ -152,6 +152,30 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- BYOK Spotify Client ID Input -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilByokClientId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:hint="Spotify Client ID (BYOK - Optional)"
+            app:boxBackgroundColor="@color/spotify_dark_card"
+            app:boxCornerRadiusBottomEnd="8dp"
+            app:boxCornerRadiusBottomStart="8dp"
+            app:boxCornerRadiusTopEnd="8dp"
+            app:boxCornerRadiusTopStart="8dp"
+            app:boxStrokeColor="@color/spotify_green"
+            app:hintTextColor="@color/spotify_sub_text">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etByokClientId"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textNoSuggestions"
+                android:textColor="@color/spotify_light_text"
+                android:textSize="14sp" />
+        </com.google.android.material.textfield.TextInputLayout>
+
         <!-- Main Buttons -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLogin"

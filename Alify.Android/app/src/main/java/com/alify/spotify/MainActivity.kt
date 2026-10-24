@@ -83,6 +83,9 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
+        // Initialize BYOK Client ID field
+        binding.etByokClientId.setText(authManager.customClientId ?: "")
+
         // Connect Button
         binding.btnLogin.setOnClickListener {
             if (authManager.isConnected()) {
@@ -91,6 +94,8 @@ class MainActivity : AppCompatActivity() {
                 updateAuthState()
                 Toast.makeText(this, "Disconnected from Spotify", Toast.LENGTH_SHORT).show()
             } else {
+                val byokInput = binding.etByokClientId.text?.toString()?.trim()
+                authManager.customClientId = if (byokInput.isNullOrEmpty()) null else byokInput
                 val authIntent = authManager.buildAuthIntent()
                 startActivity(authIntent)
             }
@@ -114,6 +119,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateAuthState() {
         val connected = authManager.isConnected()
+        binding.tilByokClientId.visibility = if (connected) View.GONE else View.VISIBLE
         if (connected) {
             binding.tvConnectionStatus.text = "● Connected to Spotify"
             binding.tvConnectionStatus.setTextColor(ContextCompat.getColor(this, R.color.spotify_green))

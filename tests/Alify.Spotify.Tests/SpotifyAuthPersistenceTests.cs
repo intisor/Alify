@@ -163,4 +163,38 @@ public class SpotifyAuthPersistenceTests
         Assert.Null(store.StoredData);
         Assert.False(service.IsAuthenticated());
     }
+
+    [Fact]
+    public void StartAuth_WithByokClientId_UsesAndStoresByokClientId()
+    {
+        var (service, session, _) = CreateService();
+        var byokId = "my-custom-byok-client-id-12345";
+
+        var loginUrl = service.StartAuth(byokId);
+
+        Assert.Contains($"client_id={byokId}", loginUrl);
+        Assert.Equal(byokId, session.GetString("SpotifyClientId"));
+    }
+
+    [Fact]
+    public async Task EnsureAuthenticatedAsync_RestoresByokClientIdFromTokenStore()
+    {
+        var byokId = "byok-restored-id-999";
+        var store = new MockTokenStore
+        {
+            StoredData = new SpotifyAuthData
+            {
+                ClientId = byokId,
+                AccessToken = "valid-byok-access-token",
+                RefreshToken = "valid-byok-refresh-token",
+                ExpiresAtUtc = DateTime.UtcNow.AddHours(2)
+            }
+        };
+
+        var (service, session, _) = CreateService(store);
+        var result = await service.EnsureAuthenticatedAsync();
+
+        Assert.True(result);
+        Assert.Equal(byokId, session.GetString("SpotifyClientId"));
+    }
 }

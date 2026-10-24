@@ -19,10 +19,17 @@ class SpotifyAuthManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("alify_spotify_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        const val CLIENT_ID = "21300c3132f64c0ab1a755a6e5b0d1e8"
+        const val DEFAULT_CLIENT_ID = "21300c3132f64c0ab1a755a6e5b0d1e8"
         const val REDIRECT_URI = "alify://callback"
         const val SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
     }
+
+    var customClientId: String?
+        get() = prefs.getString("custom_client_id", null)
+        set(value) = prefs.edit().putString("custom_client_id", value).apply()
+
+    val clientId: String
+        get() = customClientId?.takeIf { it.isNotBlank() } ?: DEFAULT_CLIENT_ID
 
     private var codeVerifier: String?
         get() = prefs.getString("code_verifier", null)
@@ -51,7 +58,7 @@ class SpotifyAuthManager(private val context: Context) {
 
         val uri = Uri.parse("https://accounts.spotify.com/authorize")
             .buildUpon()
-            .appendQueryParameter("client_id", CLIENT_ID)
+            .appendQueryParameter("client_id", clientId)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("code_challenge_method", "S256")
@@ -67,7 +74,7 @@ class SpotifyAuthManager(private val context: Context) {
         val verifier = codeVerifier ?: return@withContext false
 
         val formBody = FormBody.Builder()
-            .add("client_id", CLIENT_ID)
+            .add("client_id", clientId)
             .add("grant_type", "authorization_code")
             .add("code", code)
             .add("redirect_uri", REDIRECT_URI)
@@ -109,7 +116,7 @@ class SpotifyAuthManager(private val context: Context) {
         val refToken = refreshToken ?: return@withContext null
 
         val formBody = FormBody.Builder()
-            .add("client_id", CLIENT_ID)
+            .add("client_id", clientId)
             .add("grant_type", "refresh_token")
             .add("refresh_token", refToken)
             .build()
@@ -141,7 +148,9 @@ class SpotifyAuthManager(private val context: Context) {
     }
 
     fun disconnect() {
+        val savedCustomClientId = customClientId
         prefs.edit().clear().apply()
+        customClientId = savedCustomClientId
     }
 
     private fun generateCodeVerifier(): String {
