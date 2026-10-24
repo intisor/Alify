@@ -1,6 +1,7 @@
 package com.alify.spotify
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -58,6 +59,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
+        val filterPrefs = getSharedPreferences("alify_filter_prefs", Context.MODE_PRIVATE)
+
         // Setup Ethos Spinner
         val profiles = listOf(
             "Islamic Ethos (Halal: Zero Shirk, Fahisha, Khamr)",
@@ -67,27 +70,57 @@ class MainActivity : AppCompatActivity() {
         )
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, profiles)
         binding.spProfile.adapter = adapter
+        binding.spProfile.setSelection(filterPrefs.getInt("filter_profile", 0))
+
+        fun saveFilterSettings() {
+            filterPrefs.edit()
+                .putInt("filter_profile", binding.spProfile.selectedItemPosition)
+                .putInt("filter_strictness", binding.sbStrictness.progress)
+                .putBoolean("filter_explicit", binding.cbExplicit.isChecked)
+                .putBoolean("enable_gemini", binding.cbGemini.isChecked)
+                .putString("gemini_api_key", binding.etGeminiApiKey.text?.toString()?.trim() ?: "")
+                .apply()
+        }
 
         binding.spProfile.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                saveFilterSettings()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         // Setup Strictness Slider
+        val savedStrictness = filterPrefs.getInt("filter_strictness", 10)
+        binding.sbStrictness.progress = savedStrictness
+        binding.tvStrictnessLabel.text = "Strictness Level: $savedStrictness / 10"
+
         binding.sbStrictness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 binding.tvStrictnessLabel.text = "Strictness Level: $progress / 10"
+                if (fromUser) saveFilterSettings()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+
+        // Checkboxes and API Key
+        binding.cbExplicit.isChecked = filterPrefs.getBoolean("filter_explicit", false)
+        binding.cbExplicit.setOnCheckedChangeListener { _, _ -> saveFilterSettings() }
+
+        binding.cbGemini.isChecked = filterPrefs.getBoolean("enable_gemini", true)
+        binding.cbGemini.setOnCheckedChangeListener { _, isChecked ->
+            saveFilterSettings()
+            binding.tilGeminiApiKey.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+
+        binding.etGeminiApiKey.setText(filterPrefs.getString("gemini_api_key", ""))
 
         // Initialize BYOK Client ID field
         binding.etByokClientId.setText(authManager.customClientId ?: "")
 
         // Connect Button
         binding.btnLogin.setOnClickListener {
+            saveFilterSettings()
             if (authManager.isConnected()) {
                 authManager.disconnect()
                 AlifyMonitorService.stop(this)
@@ -103,6 +136,7 @@ class MainActivity : AppCompatActivity() {
 
         // Toggle Protection Button
         binding.btnToggleProtection.setOnClickListener {
+            saveFilterSettings()
             if (AlifyMonitorService.isRunning) {
                 AlifyMonitorService.stop(this)
                 binding.btnToggleProtection.text = "Start Halal Protection"

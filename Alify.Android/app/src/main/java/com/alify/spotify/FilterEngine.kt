@@ -1,5 +1,6 @@
 package com.alify.spotify
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -28,6 +29,26 @@ class FilterEngine(
     var enableGemini: Boolean = true,
     var geminiApiKey: String = ""
 ) {
+    companion object {
+        fun fromPreferences(context: Context): FilterEngine {
+            val prefs = context.getSharedPreferences("alify_filter_prefs", Context.MODE_PRIVATE)
+            val profileOrdinal = prefs.getInt("filter_profile", EthosProfile.ISLAMIC.ordinal)
+            val profile = EthosProfile.values().getOrElse(profileOrdinal) { EthosProfile.ISLAMIC }
+            val strictness = prefs.getInt("filter_strictness", 10)
+            val filterExplicit = prefs.getBoolean("filter_explicit", false)
+            val enableGemini = prefs.getBoolean("enable_gemini", true)
+            val geminiKey = prefs.getString("gemini_api_key", "") ?: ""
+
+            return FilterEngine(
+                profile = profile,
+                strictness = strictness,
+                filterExplicit = filterExplicit,
+                enableGemini = enableGemini,
+                geminiApiKey = geminiKey
+            )
+        }
+    }
+
     private val httpClient = OkHttpClient()
 
     private val violencePatterns = listOf(

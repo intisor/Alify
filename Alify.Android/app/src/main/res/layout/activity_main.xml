@@ -149,6 +149,31 @@
                     android:text="Enable Gemini 2.5 Flash scanning"
                     android:textColor="@color/spotify_light_text" />
 
+                <!-- BYOK Gemini API Key Input -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/tilGeminiApiKey"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="Gemini API Key (BYOK - Optional)"
+                    app:boxBackgroundColor="@color/spotify_dark_card"
+                    app:boxCornerRadiusBottomEnd="8dp"
+                    app:boxCornerRadiusBottomStart="8dp"
+                    app:boxCornerRadiusTopEnd="8dp"
+                    app:boxCornerRadiusTopStart="8dp"
+                    app:boxStrokeColor="@color/spotify_green"
+                    app:hintTextColor="@color/spotify_sub_text"
+                    app:endIconMode="password_toggle">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etGeminiApiKey"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword"
+                        android:textColor="@color/spotify_light_text"
+                        android:textSize="14sp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

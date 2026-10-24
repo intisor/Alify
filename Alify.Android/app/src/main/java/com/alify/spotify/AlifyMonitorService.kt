@@ -63,6 +63,7 @@ class AlifyMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         authManager = SpotifyAuthManager(this)
+        filterEngine = FilterEngine.fromPreferences(this)
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Active - Halal / Ethos Protection On"))
         isRunning = true
