@@ -29,7 +29,7 @@ class AlifyMonitorService : Service() {
 
     private lateinit var authManager: SpotifyAuthManager
     private val lrclibClient = LrclibClient()
-    private val filterEngine = FilterEngine()
+    private var filterEngine = FilterEngine()
 
     private var lastTrackId: String? = null
 
@@ -70,6 +70,7 @@ class AlifyMonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        filterEngine = FilterEngine.fromPreferences(this)
         scope.launch {
             monitorLoop()
         }
