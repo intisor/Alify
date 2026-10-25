@@ -41,6 +41,12 @@
             android:label="Settings &amp; Credentials"
             android:parentActivityName=".MainActivity" />
 
+        <activity
+            android:name=".LyricsActivity"
+            android:exported="false"
+            android:label="Lyrics &amp; Stance Audit"
+            android:parentActivityName=".MainActivity" />
+
         <service
             android:name=".AlifyMonitorService"
             android:exported="false"

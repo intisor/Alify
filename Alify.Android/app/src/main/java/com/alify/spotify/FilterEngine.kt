@@ -19,7 +19,9 @@ enum class EthosProfile {
 
 data class FilterResult(
     val isFlagged: Boolean,
-    val flagReason: String? = null
+    val flagReason: String? = null,
+    val flaggedLines: List<String> = emptyList(),
+    val annotations: Map<String, String> = emptyMap()
 )
 
 class FilterEngine(
@@ -87,37 +89,58 @@ class FilterEngine(
             return@withContext FilterResult(false)
         }
 
-        // 2. Heuristic Regex Scanning
+        // 2. Heuristic Regex Scanning line by line
         val violations = mutableListOf<String>()
+        val flaggedLines = mutableListOf<String>()
+        val annotations = mutableMapOf<String, String>()
 
-        if (profile == EthosProfile.ISLAMIC) {
-            if (islamicProhibitions.any { it.containsMatchIn(lyrics) }) {
-                violations.add("Fahisha / Prohibited Content")
+        for (rawLine in lyrics.lines()) {
+            val line = rawLine.trim()
+            if (line.isEmpty() || (line.startsWith("[") && line.endsWith("]"))) continue
+
+            val lineReasons = mutableListOf<String>()
+
+            if (profile == EthosProfile.ISLAMIC) {
+                if (islamicProhibitions.any { it.containsMatchIn(line) }) {
+                    lineReasons.add("Fahisha / Prohibited Content")
+                }
+                if (substancePatterns.any { it.containsMatchIn(line) }) {
+                    lineReasons.add("Intoxicants / Khamr")
+                }
+                if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(line) }) {
+                    lineReasons.add("Violence")
+                }
+            } else if (profile == EthosProfile.CHRISTIAN) {
+                if (christianProhibitions.any { it.containsMatchIn(line) }) {
+                    lineReasons.add("Biblical Immorality / Blasphemy")
+                }
+                if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(line) }) {
+                    lineReasons.add("Violence")
+                }
+            } else if (profile == EthosProfile.FAMILY_FRIENDLY) {
+                if (islamicProhibitions.any { it.containsMatchIn(line) } ||
+                    substancePatterns.any { it.containsMatchIn(line) } ||
+                    violencePatterns.any { it.containsMatchIn(line) }
+                ) {
+                    lineReasons.add("Vulgarity / Substance / Violence")
+                }
             }
-            if (substancePatterns.any { it.containsMatchIn(lyrics) }) {
-                violations.add("Intoxicants / Khamr")
-            }
-            if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(lyrics) }) {
-                violations.add("Violence")
-            }
-        } else if (profile == EthosProfile.CHRISTIAN) {
-            if (christianProhibitions.any { it.containsMatchIn(lyrics) }) {
-                violations.add("Biblical Immorality / Blasphemy")
-            }
-            if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(lyrics) }) {
-                violations.add("Violence")
-            }
-        } else if (profile == EthosProfile.FAMILY_FRIENDLY) {
-            if (islamicProhibitions.any { it.containsMatchIn(lyrics) } ||
-                substancePatterns.any { it.containsMatchIn(lyrics) } ||
-                violencePatterns.any { it.containsMatchIn(lyrics) }
-            ) {
-                violations.add("Vulgarity / Substance / Violence")
+
+            if (lineReasons.isNotEmpty()) {
+                flaggedLines.add(line)
+                annotations[line] = lineReasons.joinToString(", ")
+                violations.addAll(lineReasons)
             }
         }
 
-        if (violations.isNotEmpty()) {
-            return@withContext FilterResult(true, "Policy Violation (${violations.joinToString(", ")})")
+        if (flaggedLines.isNotEmpty()) {
+            val distinctViolations = violations.distinct().joinToString(", ")
+            return@withContext FilterResult(
+                isFlagged = true,
+                flagReason = "Policy Violation ($distinctViolations)",
+                flaggedLines = flaggedLines,
+                annotations = annotations
+            )
         }
 
         // 3. Gemini 2.5 Flash Deep Semantic Scan (handles slang, Yoruba, Afrobeats, Pidgin, nuance)
@@ -161,7 +184,11 @@ class FilterEngine(
             Respond strictly in valid JSON without markdown:
             {
               "flagged": true,
-              "reason": "Cite the exact offending line, its decoded meaning, and the ethos violation"
+              "reason": "Ethos violation summary",
+              "flagged_lines": ["exact offending line 1", "exact offending line 2"],
+              "explanations": {
+                "exact offending line 1": "Decoded subtext and why it violates the ethos"
+              }
             }
             or if completely clean:
             {
@@ -242,7 +269,34 @@ class FilterEngine(
                 val reason = parsed.optString("reason", "Ethos Violation")
 
                 if (flagged) {
-                    return@withContext FilterResult(true, "$profile Ethos: $reason")
+                    val flaggedLinesList = mutableListOf<String>()
+                    val parsedLines = parsed.optJSONArray("flagged_lines")
+                    if (parsedLines != null) {
+                        for (i in 0 until parsedLines.length()) {
+                            val l = parsedLines.optString(i)
+                            if (!l.isNullOrBlank()) flaggedLinesList.add(l)
+                        }
+                    }
+                    val annotationsMap = mutableMapOf<String, String>()
+                    val parsedExplanations = parsed.optJSONObject("explanations")
+                    if (parsedExplanations != null) {
+                        val keys = parsedExplanations.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            annotationsMap[k] = parsedExplanations.optString(k)
+                        }
+                    } else {
+                        for (l in flaggedLinesList) {
+                            annotationsMap[l] = reason
+                        }
+                    }
+
+                    return@withContext FilterResult(
+                        isFlagged = true,
+                        flagReason = "$profile Ethos: $reason",
+                        flaggedLines = flaggedLinesList,
+                        annotations = annotationsMap
+                    )
                 }
             }
         } catch (e: Exception) {

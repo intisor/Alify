@@ -78,6 +78,20 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
+        // View Lyrics & Annotations Button
+        binding.btnViewLyrics.setOnClickListener {
+            val intent = LyricsActivity.createIntent(
+                context = this,
+                trackName = AlifyMonitorService.lastTrackName,
+                artistName = AlifyMonitorService.lastArtistName,
+                isFlagged = AlifyMonitorService.isLastFlagged,
+                flagReason = AlifyMonitorService.lastFlagReason,
+                flaggedLines = AlifyMonitorService.lastFlaggedLines,
+                lyrics = AlifyMonitorService.lastLyrics
+            )
+            startActivity(intent)
+        }
+
         // Connect / Disconnect Button
         binding.btnLogin.setOnClickListener {
             if (authManager.isConnected()) {
@@ -175,6 +189,7 @@ class MainActivity : AppCompatActivity() {
             binding.tvCurrentTrack.text = "No track playing"
             binding.tvCurrentArtist.text = if (hasClientId) "Connect Spotify to start monitoring" else "Configure Spotify Developer Client ID first"
             binding.tvSafetyBadge.visibility = View.GONE
+            binding.btnViewLyrics.visibility = View.GONE
         }
     }
 
@@ -186,6 +201,24 @@ class MainActivity : AppCompatActivity() {
                     binding.tvCurrentArtist.text = AlifyMonitorService.lastArtistName
                     binding.tvSafetyBadge.visibility = View.VISIBLE
                     binding.tvSafetyBadge.text = AlifyMonitorService.lastStatusBadge
+
+                    val hasTrack = AlifyMonitorService.lastTrackName.isNotEmpty() && AlifyMonitorService.lastTrackName != "No track playing"
+                    if (hasTrack) {
+                        binding.btnViewLyrics.visibility = View.VISIBLE
+                        if (AlifyMonitorService.isLastFlagged) {
+                            val flagCount = AlifyMonitorService.lastFlaggedLines.size
+                            val countStr = if (flagCount > 0) " ($flagCount flagged)" else ""
+                            binding.btnViewLyrics.text = "🔍 Inspect Flagged Verses$countStr"
+                            binding.btnViewLyrics.strokeColor = ContextCompat.getColorStateList(this@MainActivity, R.color.flag_red)
+                            binding.btnViewLyrics.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.flag_red_light))
+                        } else {
+                            binding.btnViewLyrics.text = "📜 View Lyrics & Stance Audit"
+                            binding.btnViewLyrics.strokeColor = ContextCompat.getColorStateList(this@MainActivity, R.color.spotify_green)
+                            binding.btnViewLyrics.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.spotify_light_text))
+                        }
+                    } else {
+                        binding.btnViewLyrics.visibility = View.GONE
+                    }
 
                     if (AlifyMonitorService.isLastFlagged) {
                         binding.tvSafetyBadge.setBackgroundResource(R.drawable.badge_flagged)

@@ -156,6 +156,20 @@
                     android:textStyle="bold"
                     android:visibility="gone" />
 
+                <!-- Button to Open Lyrics & Stance Audit -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnViewLyrics"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="46dp"
+                    android:layout_marginTop="12dp"
+                    android:text="📜 View Lyrics &amp; Annotations"
+                    android:textColor="@color/spotify_light_text"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="@color/spotify_green" />
+
                 <!-- Active Filter Configuration Display -->
                 <View
                     android:layout_width="match_parent"

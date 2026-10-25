@@ -5,5 +5,10 @@
     <color name="spotify_light_text">#FFFFFF</color>
     <color name="spotify_sub_text">#B3B3B3</color>
     <color name="flag_red">#E22134</color>
+    <color name="flag_red_bg">#2A1417</color>
+    <color name="flag_red_border">#7F1D1D</color>
+    <color name="flag_red_light">#FCA5A5</color>
+    <color name="clean_green_bg">#0D2818</color>
+    <color name="line_number_color">#666666</color>
     <color name="accent_blue">#007ACC</color>
 </resources>

@@ -44,6 +44,10 @@ class AlifyMonitorService : Service() {
         var lastArtistName: String = ""
         var lastStatusBadge: String = "✓ Clean"
         var isLastFlagged: Boolean = false
+        var lastLyrics: String? = null
+        var lastFlagReason: String? = null
+        var lastFlaggedLines: List<String> = emptyList()
+        var lastAnnotations: Map<String, String> = emptyMap()
 
         fun start(context: Context) {
             val intent = Intent(context, AlifyMonitorService::class.java)
@@ -123,6 +127,11 @@ class AlifyMonitorService : Service() {
             // Fetch Lyrics & Evaluate
             val lyrics = lrclibClient.getLyrics(artistName, trackName)
             val result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
+
+            lastLyrics = lyrics
+            lastFlagReason = result.flagReason
+            lastFlaggedLines = result.flaggedLines
+            lastAnnotations = result.annotations
 
             if (result.isFlagged) {
                 isLastFlagged = true
