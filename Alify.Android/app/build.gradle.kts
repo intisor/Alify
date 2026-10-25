@@ -11,11 +11,25 @@ android {
         applicationId = "com.alify.spotify"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2.0"
 
         manifestPlaceholders["redirectSchemeName"] = "alify"
         manifestPlaceholders["redirectHostName"] = "callback"
+    }
+
+    signingConfigs {
+        create("release") {
+            val ksFile = file("../release.keystore")
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = "alifypassword"
+                keyAlias = "alify"
+                keyPassword = "alifypassword"
+            } else {
+                initWith(signingConfigs.getByName("debug"))
+            }
+        }
     }
 
     buildTypes {
@@ -25,7 +39,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug") // Allows installing the APK directly without manual keystore configuration
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

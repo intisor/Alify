@@ -10,6 +10,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build & Package Android APK
@@ -25,6 +28,17 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: 17
+
+      - name: Setup Persistent Signing Keystore
+        run: |
+          if [ ! -f Alify.Android/release.keystore ]; then
+            keytool -genkeypair -v -keystore Alify.Android/release.keystore -alias alify -keyalg RSA -keysize 2048 -validity 10000 -storepass alifypassword -keypass alifypassword -dname "CN=Alify, O=Alify, C=US"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Alify.Android/release.keystore
+            git commit -m "chore(android): add persistent release signing keystore" || true
+            git push origin master || true
+          fi
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
