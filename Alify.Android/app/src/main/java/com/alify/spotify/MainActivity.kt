@@ -242,6 +242,12 @@ class MainActivity : AppCompatActivity() {
     private fun checkForUpdates() {
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                val currentVersion = try {
+                    packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.0"
+                } catch (e: Exception) {
+                    "1.3.0"
+                }
+
                 val client = okhttp3.OkHttpClient()
                 val request = okhttp3.Request.Builder()
                     .url("https://api.github.com/repos/intisor/Alify/releases/latest")
@@ -253,11 +259,11 @@ class MainActivity : AppCompatActivity() {
                     val json = org.json.JSONObject(body)
                     val tagName = json.optString("tag_name")
                     val htmlUrl = json.optString("html_url")
-                    if (tagName.isNotEmpty() && tagName != "v1.0.0") {
+                    if (tagName.isNotEmpty() && VersionUtil.isNewerVersion(tagName, currentVersion)) {
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                             com.google.android.material.snackbar.Snackbar.make(
                                 binding.root,
-                                "Update available: $tagName",
+                                "Update available: $tagName (Current: v$currentVersion)",
                                 com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE
                             ).setAction("Download") {
                                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(htmlUrl))

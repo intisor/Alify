@@ -12,7 +12,15 @@ import android.widget.ArrayAdapter
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.alify.spotify.databinding.ActivitySettingsBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -28,6 +36,20 @@ class SettingsActivity : AppCompatActivity() {
 
         setupListeners()
         loadPreferences()
+        displayAppVersion()
+    }
+
+    private fun displayAppVersion() {
+        val currentVersion = getInstalledVersion()
+        binding.tvAppVersion.text = "Installed Version: v$currentVersion"
+    }
+
+    private fun getInstalledVersion(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.3.0"
+        } catch (e: Exception) {
+            "1.3.0"
+        }
     }
 
     private fun setupListeners() {
@@ -68,6 +90,11 @@ class SettingsActivity : AppCompatActivity() {
             openUrl("https://openrouter.ai/keys")
         }
 
+        // Manual Update Checker
+        binding.btnCheckUpdates.setOnClickListener {
+            checkGitHubUpdateManually()
+        }
+
         // Ethos Spinner
         val profiles = listOf(
             "Islamic Ethos (Halal: Zero Shirk, Fahisha, Khamr)",
@@ -89,6 +116,62 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.cbEnableAi.setOnCheckedChangeListener { _, isChecked ->
             binding.tilAiApiKey.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun checkGitHubUpdateManually() {
+        val currentVersion = getInstalledVersion()
+        binding.btnCheckUpdates.isEnabled = false
+        binding.btnCheckUpdates.text = "Checking GitHub..."
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val client = OkHttpClient()
+                val request = Request.Builder()
+                    .url("https://api.github.com/repos/intisor/Alify/releases/latest")
+                    .header("User-Agent", "Alify-Android")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    withContext(Dispatchers.Main) {
+                        binding.btnCheckUpdates.isEnabled = true
+                        binding.btnCheckUpdates.text = "🔄 Check for Updates on GitHub"
+
+                        if (!response.isSuccessful) {
+                            Toast.makeText(this@SettingsActivity, "Could not fetch releases (HTTP ${response.code})", Toast.LENGTH_SHORT).show()
+                            return@withContext
+                        }
+
+                        val body = response.body?.string() ?: return@withContext
+                        val json = JSONObject(body)
+                        val tagName = json.optString("tag_name")
+                        val htmlUrl = json.optString("html_url")
+
+                        if (tagName.isNotEmpty() && VersionUtil.isNewerVersion(tagName, currentVersion)) {
+                            MaterialAlertDialogBuilder(this@SettingsActivity)
+                                .setTitle("Update Available: $tagName")
+                                .setMessage("A new update ($tagName) is available on GitHub!\n\nYour current version: v$currentVersion\n\nWould you like to open the release page to download the latest APK?")
+                                .setPositiveButton("Download APK") { _, _ ->
+                                    openUrl(htmlUrl)
+                                }
+                                .setNegativeButton("Later", null)
+                                .show()
+                        } else {
+                            MaterialAlertDialogBuilder(this@SettingsActivity)
+                                .setTitle("Up to Date")
+                                .setMessage("You are running the latest version of Alify (v$currentVersion).")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.btnCheckUpdates.isEnabled = true
+                    binding.btnCheckUpdates.text = "🔄 Check for Updates on GitHub"
+                    Toast.makeText(this@SettingsActivity, "Network error checking updates", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
