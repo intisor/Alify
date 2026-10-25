@@ -19,7 +19,6 @@ class SpotifyAuthManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("alify_spotify_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        const val DEFAULT_CLIENT_ID = "21300c3132f64c0ab1a755a6e5b0d1e8"
         const val REDIRECT_URI = "alify://callback"
         const val SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
     }
@@ -28,8 +27,11 @@ class SpotifyAuthManager(private val context: Context) {
         get() = prefs.getString("custom_client_id", null)
         set(value) = prefs.edit().putString("custom_client_id", value).apply()
 
-    val clientId: String
-        get() = customClientId?.takeIf { it.isNotBlank() } ?: DEFAULT_CLIENT_ID
+    val hasClientId: Boolean
+        get() = !customClientId.isNullOrBlank()
+
+    val clientId: String?
+        get() = customClientId?.takeIf { it.isNotBlank() }
 
     private var codeVerifier: String?
         get() = prefs.getString("code_verifier", null)
@@ -51,14 +53,15 @@ class SpotifyAuthManager(private val context: Context) {
         return !refreshToken.isNullOrEmpty()
     }
 
-    fun buildAuthIntent(): Intent {
+    fun buildAuthIntent(): Intent? {
+        val currentClientId = clientId ?: return null
         val verifier = generateCodeVerifier()
         codeVerifier = verifier
         val challenge = generateCodeChallenge(verifier)
 
         val uri = Uri.parse("https://accounts.spotify.com/authorize")
             .buildUpon()
-            .appendQueryParameter("client_id", clientId)
+            .appendQueryParameter("client_id", currentClientId)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .appendQueryParameter("code_challenge_method", "S256")
@@ -70,11 +73,12 @@ class SpotifyAuthManager(private val context: Context) {
     }
 
     suspend fun handleCallback(uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val currentClientId = clientId ?: return@withContext false
         val code = uri.getQueryParameter("code") ?: return@withContext false
         val verifier = codeVerifier ?: return@withContext false
 
         val formBody = FormBody.Builder()
-            .add("client_id", clientId)
+            .add("client_id", currentClientId)
             .add("grant_type", "authorization_code")
             .add("code", code)
             .add("redirect_uri", REDIRECT_URI)
@@ -113,10 +117,11 @@ class SpotifyAuthManager(private val context: Context) {
             return@withContext currentToken
         }
 
+        val currentClientId = clientId ?: return@withContext null
         val refToken = refreshToken ?: return@withContext null
 
         val formBody = FormBody.Builder()
-            .add("client_id", clientId)
+            .add("client_id", currentClientId)
             .add("grant_type", "refresh_token")
             .add("refresh_token", refToken)
             .build()

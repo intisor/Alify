@@ -45,7 +45,7 @@ Spotify limits developer applications in development mode to a small whitelist o
 
 5. **Paste into Alify**:
    - **Desktop**: On the Alify login screen, paste your Client ID into the **"Bring Your Own Keys: Spotify Client ID"** field before clicking **Connect with Spotify**.
-   - **Android**: Paste your Client ID into the **"Spotify Client ID (BYOK - Optional)"** field on the main screen before clicking **Connect with Spotify**.
+   - **Android**: Tap the **Settings (⚙️)** gear icon in the top right, and paste your Client ID under **Spotify Developer Client ID (BYOK)**. The app includes direct in-app buttons to open the dashboard and copy the redirect URI with one tap.
 
 ---
 
@@ -72,7 +72,7 @@ You can use **any** of the following supported AI backends:
 4. Copy the generated key (starts with `AIza...`).
 5. Paste it into Alify:
    - **Desktop**: In the Lyrics Semantic Analysis screen, expand *Optional: Run AI BYOK Model* and paste the key.
-   - **Android**: Enter the key into the *AI API Key* field under Filter Settings.
+   - **Android**: Tap the **Settings (⚙️)** icon, enable AI semantic scanning, and enter your key under **AI API Key (BYOK)**.
 
 ---
 

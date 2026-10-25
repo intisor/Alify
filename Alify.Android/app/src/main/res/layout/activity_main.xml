@@ -12,28 +12,100 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- App Brand Header -->
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- App Brand Header with Settings Icon -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Alify"
-            android:textColor="@color/spotify_green"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="Halal &amp; Worldview Music Protection"
-            android:textColor="@color/spotify_sub_text"
-            android:textSize="14sp" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-        <!-- Status Card -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Alify"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Halal &amp; Worldview Music Protection"
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Settings &amp; Credentials"
+                android:padding="12dp"
+                android:src="@drawable/ic_settings"
+                app:tint="@color/spotify_light_text" />
+        </LinearLayout>
+
+        <!-- Setup Notice Card (Visible when Spotify Client ID is not yet configured) -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardSetupNotice"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/spotify_dark_card"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:contentPadding="16dp"
+            app:strokeColor="@color/accent_blue"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ Developer Client ID Required"
+                    android:textColor="@color/accent_blue"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Spotify limits unverified developer apps. Add your personal Spotify Developer Client ID (free 2-minute setup) for unlimited access."
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSetupClientId"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="10dp"
+                    android:text="Configure Client ID &amp; Keys"
+                    android:textColor="@color/spotify_light_text"
+                    app:strokeColor="@color/accent_blue" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Playback & Protection Status Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
             app:cardBackgroundColor="@color/spotify_dark_card"
             app:cardCornerRadius="12dp"
             app:cardElevation="2dp"
@@ -49,17 +121,17 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="● Ready to Connect"
-                    android:textColor="@color/spotify_green"
+                    android:textColor="@color/spotify_sub_text"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvCurrentTrack"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="12dp"
                     android:text="No track playing"
                     android:textColor="@color/spotify_light_text"
-                    android:textSize="16sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -68,13 +140,13 @@
                     android:layout_height="wrap_content"
                     android:text="Connect Spotify to start monitoring"
                     android:textColor="@color/spotify_sub_text"
-                    android:textSize="13sp" />
+                    android:textSize="14sp" />
 
                 <TextView
                     android:id="@+id/tvSafetyBadge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="12dp"
                     android:background="@drawable/badge_clean"
                     android:paddingHorizontal="10dp"
                     android:paddingVertical="4dp"
@@ -83,125 +155,42 @@
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Filter Settings Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            app:cardBackgroundColor="@color/spotify_dark_card"
-            app:cardCornerRadius="12dp"
-            app:contentPadding="16dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Ethos &amp; Strictness Profile"
-                    android:textColor="@color/spotify_light_text"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <Spinner
-                    android:id="@+id/spProfile"
+                <!-- Active Filter Configuration Display -->
+                <View
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="8dp"
-                    android:background="@android:drawable/btn_dropdown" />
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="12dp"
+                    android:background="@color/spotify_black" />
 
-                <TextView
-                    android:id="@+id/tvStrictnessLabel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="Strictness Level: 10 / 10"
-                    android:textColor="@color/spotify_light_text"
-                    android:textSize="14sp" />
-
-                <SeekBar
-                    android:id="@+id/sbStrictness"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:max="10"
-                    android:min="1"
-                    android:progress="10" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.checkbox.MaterialCheckBox
-                    android:id="@+id/cbExplicit"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="false"
-                    android:text="Skip Spotify Explicit [E] tracks"
-                    android:textColor="@color/spotify_light_text" />
-
-                <com.google.android.material.checkbox.MaterialCheckBox
-                    android:id="@+id/cbGemini"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="Enable AI semantic scanning"
-                    android:textColor="@color/spotify_light_text" />
-
-                <!-- BYOK AI API Key Input -->
-                <com.google.android.material.textfield.TextInputLayout
-                    android:id="@+id/tilGeminiApiKey"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:hint="AI API Key (BYOK: Gemini, OpenRouter, Groq)"
-                    app:helperText="Supports Google Gemini (AIza...), OpenRouter (sk-...), Groq (gsk_...)"
-                    app:helperTextTextColor="@color/spotify_sub_text"
-                    app:boxBackgroundColor="@color/spotify_dark_card"
-                    app:boxCornerRadiusBottomEnd="8dp"
-                    app:boxCornerRadiusBottomStart="8dp"
-                    app:boxCornerRadiusTopEnd="8dp"
-                    app:boxCornerRadiusTopStart="8dp"
-                    app:boxStrokeColor="@color/spotify_green"
-                    app:hintTextColor="@color/spotify_sub_text"
-                    app:endIconMode="password_toggle">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etGeminiApiKey"
-                        android:layout_width="match_parent"
+                    <TextView
+                        android:id="@+id/tvActiveEthos"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:inputType="textPassword"
-                        android:textColor="@color/spotify_light_text"
-                        android:textSize="14sp" />
-                </com.google.android.material.textfield.TextInputLayout>
+                        android:layout_weight="1"
+                        android:text="Active Ethos: Islamic (10/10)"
+                        android:textColor="@color/spotify_sub_text"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvChangeSettings"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:padding="4dp"
+                        android:text="Change"
+                        android:textColor="@color/spotify_green"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
-        <!-- BYOK Spotify Client ID Input -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilByokClientId"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:hint="Spotify Client ID (BYOK - Optional)"
-            app:boxBackgroundColor="@color/spotify_dark_card"
-            app:boxCornerRadiusBottomEnd="8dp"
-            app:boxCornerRadiusBottomStart="8dp"
-            app:boxCornerRadiusTopEnd="8dp"
-            app:boxCornerRadiusTopStart="8dp"
-            app:boxStrokeColor="@color/spotify_green"
-            app:hintTextColor="@color/spotify_sub_text">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etByokClientId"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textNoSuggestions"
-                android:textColor="@color/spotify_light_text"
-                android:textSize="14sp" />
-        </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Main Buttons -->
         <com.google.android.material.button.MaterialButton

@@ -35,6 +35,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings &amp; Credentials"
+            android:parentActivityName=".MainActivity" />
+
         <service
             android:name=".AlifyMonitorService"
             android:exported="false"
