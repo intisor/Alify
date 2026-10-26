@@ -66,6 +66,7 @@ class FilterEngine(
 
     private val httpClient = OkHttpClient()
 
+    /* REGEX HEURISTICS COMMENTED OFF - Pure LLM Semantic Evaluation is authoritative
     private val violencePatterns = listOf(
         "\\b(murder|shoot|gun|knife|stab|bullet|massacre|slaughter|headshot|uzi|glock)\\b",
         "\\b(bloodshed|spill(?:\\s+\\w+)?\\s+blood|shed(?:\\s+\\w+)?\\s+blood|pools?\\s+of\\s+blood|bloody)\\b",
@@ -90,6 +91,7 @@ class FilterEngine(
         "\\b(demonic|satan|devil|witchcraft|occult|blasphemy)\\b",
         "\\b(whore|bitch|slut|fuck|pussy|dick|sex|fornication|lust)\\b"
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
+    */
 
     suspend fun evaluate(
         trackName: String,
@@ -106,107 +108,22 @@ class FilterEngine(
             return@withContext FilterResult(false)
         }
 
-        val hasAi = enableGemini && geminiApiKey.isNotBlank()
-
-        when (analysisMode) {
-            AnalysisMode.AI_SEMANTIC -> {
-                if (hasAi) {
-                    val aiResult = scanWithGemini(trackName, artistName, lyrics)
-                    if (aiResult != null) {
-                        // AI is the authoritative semantic auditor (no hardcoded regex false positives)
-                        return@withContext aiResult
-                    }
-                    // AI request failed (offline / network error) -> graceful fallback to offline regex
-                    val fallback = evaluateWithRegex(lyrics)
-                    return@withContext if (fallback.isFlagged) {
-                        fallback.copy(flagReason = "[Offline Fallback] ${fallback.flagReason}")
-                    } else {
-                        fallback
-                    }
-                } else {
-                    // No AI key provided -> evaluate with offline regex
-                    return@withContext evaluateWithRegex(lyrics)
-                }
-            }
-
-            AnalysisMode.OFFLINE_REGEX -> {
-                // Standalone on-device heuristic pattern matching (zero API calls, instant)
-                return@withContext evaluateWithRegex(lyrics)
-            }
-
-            AnalysisMode.HYBRID -> {
-                // Strict: Regex tripwires first, then AI semantic verification
-                val regexResult = evaluateWithRegex(lyrics)
-                if (regexResult.isFlagged) {
-                    return@withContext regexResult
-                }
-                if (hasAi) {
-                    val aiResult = scanWithGemini(trackName, artistName, lyrics)
-                    if (aiResult != null) {
-                        return@withContext aiResult
-                    }
-                }
-                return@withContext FilterResult(false)
+        // 2. Pure LLM Semantic Evaluation (zero hardcoded regex interference)
+        if (enableGemini && geminiApiKey.isNotBlank()) {
+            val aiResult = scanWithGemini(trackName, artistName, lyrics)
+            if (aiResult != null) {
+                return@withContext aiResult
             }
         }
+
+        return@withContext FilterResult(false)
     }
 
+    /* REGEX SCANNER COMMENTED OFF
     fun evaluateWithRegex(lyrics: String): FilterResult {
-        val violations = mutableListOf<String>()
-        val flaggedLines = mutableListOf<String>()
-        val annotations = mutableMapOf<String, String>()
-
-        for (rawLine in lyrics.lines()) {
-            val line = rawLine.trim()
-            if (line.isEmpty() || (line.startsWith("[") && line.endsWith("]"))) continue
-
-            val lineReasons = mutableListOf<String>()
-
-            if (profile == EthosProfile.ISLAMIC) {
-                if (islamicProhibitions.any { it.containsMatchIn(line) }) {
-                    lineReasons.add("Fahisha / Prohibited Content")
-                }
-                if (substancePatterns.any { it.containsMatchIn(line) }) {
-                    lineReasons.add("Intoxicants / Khamr")
-                }
-                if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(line) }) {
-                    lineReasons.add("Violence")
-                }
-            } else if (profile == EthosProfile.CHRISTIAN) {
-                if (christianProhibitions.any { it.containsMatchIn(line) }) {
-                    lineReasons.add("Biblical Immorality / Blasphemy")
-                }
-                if (strictness >= 7 && violencePatterns.any { it.containsMatchIn(line) }) {
-                    lineReasons.add("Violence")
-                }
-            } else if (profile == EthosProfile.FAMILY_FRIENDLY) {
-                if (islamicProhibitions.any { it.containsMatchIn(line) } ||
-                    substancePatterns.any { it.containsMatchIn(line) } ||
-                    violencePatterns.any { it.containsMatchIn(line) }
-                ) {
-                    lineReasons.add("Vulgarity / Substance / Violence")
-                }
-            }
-
-            if (lineReasons.isNotEmpty()) {
-                flaggedLines.add(line)
-                annotations[line] = lineReasons.joinToString(", ")
-                violations.addAll(lineReasons)
-            }
-        }
-
-        if (flaggedLines.isNotEmpty()) {
-            val distinctViolations = violations.distinct().joinToString(", ")
-            return FilterResult(
-                isFlagged = true,
-                flagReason = "Policy Violation ($distinctViolations)",
-                flaggedLines = flaggedLines,
-                annotations = annotations
-            )
-        }
-
-        return FilterResult(isFlagged = false)
+        ...
     }
+    */
 
     private suspend fun scanWithGemini(
         trackName: String,
@@ -310,7 +227,7 @@ class FilterEngine(
             }
 
             Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey")
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=$geminiApiKey")
                 .post(jsonPayload.toString().toRequestBody("application/json".toMediaType()))
                 .build()
         }
