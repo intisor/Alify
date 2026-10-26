@@ -57,13 +57,17 @@ class FilterEngine(
     private val httpClient = OkHttpClient()
 
     private val violencePatterns = listOf(
-        "\\b(murder|kill|shoot|gun|knife|stab|blood|bullet|massacre)\\b",
-        "\\b(dead|die|corpse|slaughter|headshot|uzi|glock)\\b"
+        "\\b(murder|shoot|gun|knife|stab|bullet|massacre|slaughter|headshot|uzi|glock)\\b",
+        "\\b(bloodshed|spill(?:\\s+\\w+)?\\s+blood|shed(?:\\s+\\w+)?\\s+blood|pools?\\s+of\\s+blood|bloody)\\b",
+        "\\b(die)\\b(?!(?:\\s+for\\b|\\s+in\\s+peace|\\s+hard))",
+        "\\b(dead|corpse)\\b(?!(?:\\s+(?:of\\s+night|presidents|in\\s+my\\s+tracks)))",
+        "\\b(kill|killing|killed)\\b(?!(?:\\s+(?:it|the\\s+beat|the\\s+show|the\\s+dance|the\\s+game|my\\s+vibe)))"
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     private val substancePatterns = listOf(
-        "\\b(cocaine|weed|marijuana|heroin|molly|lean|xanax|percocet|pills|narcotics)\\b",
-        "\\b(drunk|alcohol|whiskey|vodka|smoke|high|trip)\\b"
+        "\\b(cocaine|weed|marijuana|heroin|molly|lean|xanax|percocet|pills|narcotics|colorado|colos|shisha)\\b",
+        "\\b(drunk|alcohol|whiskey|vodka|khamr|intoxicated|blunt|stoned|baked|codeine|tramadol)\\b",
+        "\\b(high)\\b(?!(?:\\s*life|\\s*above|\\s*praise|\\s*ground|\\s*school|\\s*heel))"
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     private val islamicProhibitions = listOf(
