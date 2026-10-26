@@ -72,9 +72,9 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnCopyRedirectUri.setOnClickListener {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Spotify Redirect URI", "alify://callback")
+            val clip = ClipData.newPlainText("Spotify Redirect URI", "hujjify://callback")
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, "Redirect URI copied: alify://callback", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Redirect URI copied: hujjify://callback", Toast.LENGTH_SHORT).show()
         }
 
         // AI Provider Helper Links
@@ -159,7 +159,7 @@ class SettingsActivity : AppCompatActivity() {
                         } else {
                             MaterialAlertDialogBuilder(this@SettingsActivity)
                                 .setTitle("Up to Date")
-                                .setMessage("You are running the latest version of Alify (v$currentVersion).")
+                                .setMessage("You are running the latest version of Hujjify (v$currentVersion).")
                                 .setPositiveButton("OK", null)
                                 .show()
                         }
@@ -180,6 +180,9 @@ class SettingsActivity : AppCompatActivity() {
 
         // Spotify Client ID
         binding.etSpotifyClientId.setText(authManager.customClientId ?: "")
+
+        // Chat-to-Filter Custom Prompt
+        binding.etCustomEthosPrompt.setText(filterPrefs.getString("custom_ethos_prompt", ""))
 
         // AI Settings
         val enableAi = filterPrefs.getBoolean("enable_gemini", true)
@@ -209,6 +212,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // Save Filter & AI Preferences
         filterPrefs.edit()
+            .putString("custom_ethos_prompt", binding.etCustomEthosPrompt.text?.toString()?.trim() ?: "")
             .putInt("filter_profile", binding.spProfileSettings.selectedItemPosition)
             .putInt("filter_strictness", binding.sbStrictnessSettings.progress)
             .putBoolean("filter_explicit", binding.cbExplicitSettings.isChecked)

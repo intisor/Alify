@@ -1,10 +1,10 @@
 <resources>
-    <string name="app_name">Alify</string>
+    <string name="app_name">Hujjify</string>
     <string name="title_connected">Connected to Spotify</string>
     <string name="title_disconnected">Not Connected</string>
     <string name="btn_login">Connect with Spotify</string>
     <string name="btn_start_monitor">Start Protection</string>
     <string name="btn_stop_monitor">Pause Protection</string>
-    <string name="notification_channel_name">Alify Halal &amp; Ethos Protection</string>
+    <string name="notification_channel_name">Hujjify Conscious Audio Protection</string>
     <string name="notification_channel_desc">Shows ongoing playback filtering status and skip notifications</string>
 </resources>

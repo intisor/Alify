@@ -124,8 +124,9 @@ class AlifyMonitorService : Service() {
             if (trackId == lastTrackId) return
             lastTrackId = trackId
 
-            // Fetch Lyrics & Evaluate
-            val lyrics = lrclibClient.getLyrics(artistName, trackName)
+            // Fetch Lyrics & Evaluate with multi-stage waterfall (including AI retrieval fallback)
+            val aiKey = if (filterEngine.enableGemini) filterEngine.geminiApiKey else null
+            val lyrics = lrclibClient.getLyrics(artistName, trackName, aiKey)
             val result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
 
             lastLyrics = lyrics

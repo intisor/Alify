@@ -116,7 +116,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:fontFamily="monospace"
-                        android:text="alify://callback"
+                        android:text="hujjify://callback"
                         android:textColor="@color/spotify_green"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -301,6 +301,50 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:text="💬 Chat-to-Filter (Natural Language Intent)"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Describe what you want or don't want to hear. The AI will enforce your exact boundaries."
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/tilCustomEthosPrompt"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="Tell Hujjify what to allow or skip..."
+                    app:boxBackgroundColor="@color/spotify_black"
+                    app:boxCornerRadiusBottomEnd="8dp"
+                    app:boxCornerRadiusBottomStart="8dp"
+                    app:boxCornerRadiusTopEnd="8dp"
+                    app:boxCornerRadiusTopStart="8dp"
+                    app:boxStrokeColor="@color/spotify_green"
+                    app:hintTextColor="@color/spotify_sub_text">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etCustomEthosPrompt"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="top|start"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:lines="3"
+                        android:maxLines="6"
+                        android:textColor="@color/spotify_light_text"
+                        android:textSize="13sp" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
                     android:text="Ethos Worldview Profile"
                     android:textColor="@color/spotify_light_text"
                     android:textSize="14sp"

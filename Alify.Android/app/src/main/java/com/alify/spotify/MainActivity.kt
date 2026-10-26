@@ -51,7 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleRedirectIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (uri.scheme == "alify" && uri.host == "callback") {
+        if ((uri.scheme == "hujjify" || uri.scheme == "alify") && uri.host == "callback") {
             lifecycleScope.launch {
                 val success = authManager.handleCallback(uri)
                 if (success) {
@@ -135,7 +135,7 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Spotify Client ID Required")
             .setMessage(
                 "Spotify requires each user to have their own free Developer Client ID so you have personal, unlimited access without developer whitelist restrictions.\n\n" +
-                "Redirect URI to set in your Spotify App:\nalify://callback\n\n" +
+                "Redirect URI to set in your Spotify App:\nhujjify://callback\n(or alify://callback)\n\n" +
                 "Would you like to configure your Client ID now?"
             )
             .setPositiveButton("Configure in Settings") { _, _ ->
@@ -143,9 +143,9 @@ class MainActivity : AppCompatActivity() {
             }
             .setNeutralButton("Copy Redirect URI") { _, _ ->
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Redirect URI", "alify://callback")
+                val clip = ClipData.newPlainText("Redirect URI", "hujjify://callback")
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "Redirect URI copied: alify://callback", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Redirect URI copied: hujjify://callback", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()

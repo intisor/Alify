@@ -29,7 +29,8 @@ class FilterEngine(
     var strictness: Int = 10,
     var filterExplicit: Boolean = false,
     var enableGemini: Boolean = true,
-    var geminiApiKey: String = ""
+    var geminiApiKey: String = "",
+    var customEthosPrompt: String = ""
 ) {
     companion object {
         fun fromPreferences(context: Context): FilterEngine {
@@ -40,13 +41,15 @@ class FilterEngine(
             val filterExplicit = prefs.getBoolean("filter_explicit", false)
             val enableGemini = prefs.getBoolean("enable_gemini", true)
             val geminiKey = prefs.getString("gemini_api_key", "") ?: ""
+            val customPrompt = prefs.getString("custom_ethos_prompt", "") ?: ""
 
             return FilterEngine(
                 profile = profile,
                 strictness = strictness,
                 filterExplicit = filterExplicit,
                 enableGemini = enableGemini,
-                geminiApiKey = geminiKey
+                geminiApiKey = geminiKey,
+                customEthosPrompt = customPrompt
             )
         }
     }
@@ -159,9 +162,23 @@ class FilterEngine(
         artistName: String,
         lyrics: String
     ): FilterResult? = withContext(Dispatchers.IO) {
+        val ethosInstructions = if (customEthosPrompt.isNotBlank()) {
+            """
+            USER CUSTOM INTENTIONAL DIRECTIVE (CHAT-TO-FILTER):
+            "$customEthosPrompt"
+
+            Primary Ethos Anchor: $profile with Strictness: $strictness/10.
+            CRITICAL: The user's custom directive above takes absolute priority. Strictly apply all boundaries, desires, and exclusions specified by the user.
+            """.trimIndent()
+        } else {
+            """
+            Worldview Ethos Profile: $profile with Strictness: $strictness/10.
+            """.trimIndent()
+        }
+
         val prompt = """
             You are an expert computational sociolinguist, dialect forensic analyst, and lyrical content auditor.
-            Worldview Ethos Profile: $profile with Strictness: $strictness/10.
+            $ethosInstructions
             Song: "$trackName" by "$artistName".
 
             EVALUATION PROTOCOL:

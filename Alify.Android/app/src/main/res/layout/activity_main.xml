@@ -29,7 +29,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Alify"
+                    android:text="Hujjify"
                     android:textColor="@color/spotify_green"
                     android:textSize="28sp"
                     android:textStyle="bold" />
@@ -37,7 +37,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Halal &amp; Worldview Music Protection"
+                    android:text="Conscious Music &amp; Spotify Lyric Sentinel"
                     android:textColor="@color/spotify_sub_text"
                     android:textSize="13sp" />
             </LinearLayout>
