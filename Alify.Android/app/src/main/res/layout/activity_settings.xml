@@ -234,6 +234,33 @@
                         android:textSize="14sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
+                <!-- Engine Mode Selection -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="ANALYSIS ENGINE MODE"
+                    android:textColor="@color/spotify_green"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spAnalysisMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@android:drawable/btn_dropdown" />
+
+                <TextView
+                    android:id="@+id/tvAnalysisModeHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="AI Semantic Engine is authoritative; regex runs only as offline fallback."
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="11sp" />
+
                 <!-- Free Key Helper Links -->
                 <LinearLayout
                     android:layout_width="match_parent"

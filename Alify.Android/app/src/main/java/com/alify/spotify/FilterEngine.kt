@@ -17,6 +17,12 @@ enum class EthosProfile {
     GENERAL
 }
 
+enum class AnalysisMode {
+    AI_SEMANTIC,      // Authoritative LLM: understands full context, slang, and intentional directives (no regex false flags)
+    OFFLINE_REGEX,    // Pure on-device heuristic pattern matching (zero API tokens, instant, offline)
+    HYBRID            // Strict dual guardrails (Regex tripwire fast-fail + AI verification)
+}
+
 data class FilterResult(
     val isFlagged: Boolean,
     val flagReason: String? = null,
@@ -30,7 +36,8 @@ class FilterEngine(
     var filterExplicit: Boolean = false,
     var enableGemini: Boolean = true,
     var geminiApiKey: String = "",
-    var customEthosPrompt: String = ""
+    var customEthosPrompt: String = "",
+    var analysisMode: AnalysisMode = AnalysisMode.AI_SEMANTIC
 ) {
     companion object {
         fun fromPreferences(context: Context): FilterEngine {
@@ -42,6 +49,8 @@ class FilterEngine(
             val enableGemini = prefs.getBoolean("enable_gemini", true)
             val geminiKey = prefs.getString("gemini_api_key", "") ?: ""
             val customPrompt = prefs.getString("custom_ethos_prompt", "") ?: ""
+            val modeOrdinal = prefs.getInt("analysis_mode", AnalysisMode.AI_SEMANTIC.ordinal)
+            val analysisMode = AnalysisMode.values().getOrElse(modeOrdinal) { AnalysisMode.AI_SEMANTIC }
 
             return FilterEngine(
                 profile = profile,
@@ -49,7 +58,8 @@ class FilterEngine(
                 filterExplicit = filterExplicit,
                 enableGemini = enableGemini,
                 geminiApiKey = geminiKey,
-                customEthosPrompt = customPrompt
+                customEthosPrompt = customPrompt,
+                analysisMode = analysisMode
             )
         }
     }
@@ -96,7 +106,52 @@ class FilterEngine(
             return@withContext FilterResult(false)
         }
 
-        // 2. Heuristic Regex Scanning line by line
+        val hasAi = enableGemini && geminiApiKey.isNotBlank()
+
+        when (analysisMode) {
+            AnalysisMode.AI_SEMANTIC -> {
+                if (hasAi) {
+                    val aiResult = scanWithGemini(trackName, artistName, lyrics)
+                    if (aiResult != null) {
+                        // AI is the authoritative semantic auditor (no hardcoded regex false positives)
+                        return@withContext aiResult
+                    }
+                    // AI request failed (offline / network error) -> graceful fallback to offline regex
+                    val fallback = evaluateWithRegex(lyrics)
+                    return@withContext if (fallback.isFlagged) {
+                        fallback.copy(flagReason = "[Offline Fallback] ${fallback.flagReason}")
+                    } else {
+                        fallback
+                    }
+                } else {
+                    // No AI key provided -> evaluate with offline regex
+                    return@withContext evaluateWithRegex(lyrics)
+                }
+            }
+
+            AnalysisMode.OFFLINE_REGEX -> {
+                // Standalone on-device heuristic pattern matching (zero API calls, instant)
+                return@withContext evaluateWithRegex(lyrics)
+            }
+
+            AnalysisMode.HYBRID -> {
+                // Strict: Regex tripwires first, then AI semantic verification
+                val regexResult = evaluateWithRegex(lyrics)
+                if (regexResult.isFlagged) {
+                    return@withContext regexResult
+                }
+                if (hasAi) {
+                    val aiResult = scanWithGemini(trackName, artistName, lyrics)
+                    if (aiResult != null) {
+                        return@withContext aiResult
+                    }
+                }
+                return@withContext FilterResult(false)
+            }
+        }
+    }
+
+    fun evaluateWithRegex(lyrics: String): FilterResult {
         val violations = mutableListOf<String>()
         val flaggedLines = mutableListOf<String>()
         val annotations = mutableMapOf<String, String>()
@@ -142,7 +197,7 @@ class FilterEngine(
 
         if (flaggedLines.isNotEmpty()) {
             val distinctViolations = violations.distinct().joinToString(", ")
-            return@withContext FilterResult(
+            return FilterResult(
                 isFlagged = true,
                 flagReason = "Policy Violation ($distinctViolations)",
                 flaggedLines = flaggedLines,
@@ -150,15 +205,7 @@ class FilterEngine(
             )
         }
 
-        // 3. Gemini 2.5 Flash Deep Semantic Scan (handles slang, Yoruba, Afrobeats, Pidgin, nuance)
-        if (enableGemini && geminiApiKey.isNotEmpty()) {
-            val geminiResult = scanWithGemini(trackName, artistName, lyrics)
-            if (geminiResult != null && geminiResult.isFlagged) {
-                return@withContext geminiResult
-            }
-        }
-
-        return@withContext FilterResult(false)
+        return FilterResult(isFlagged = false)
     }
 
     private suspend fun scanWithGemini(
@@ -317,6 +364,11 @@ class FilterEngine(
                         flagReason = "$profile Ethos: $reason",
                         flaggedLines = flaggedLinesList,
                         annotations = annotationsMap
+                    )
+                } else {
+                    return@withContext FilterResult(
+                        isFlagged = false,
+                        flagReason = "Verified Clean by AI ($reason)"
                     )
                 }
             }

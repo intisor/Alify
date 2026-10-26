@@ -345,20 +345,10 @@ namespace Alify.Features.Spotify.Services
                             if (!string.IsNullOrWhiteSpace(lyrics))
                             {
                                 var sourceVersion = _normalizer.Normalize(lyrics, sourceId: currentTarget.FullTrack.Id);
-                                var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
 
-                                var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);
-                                if (policyEval.Decision == PolicyDecision.RecommendSkip)
-                                {
-                                    evaluatedIsFlagged = true;
-                                    isFlagged = true;
-                                    currentTarget.IsFlagged = true;
-                                    var summary = string.Join("; ", policyEval.ReasonCodes);
-                                    evaluatedSkipReason = $"Lyrics content policy violation: {summary}";
-                                    skipReason = evaluatedSkipReason;
-                                    _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by heuristic policy evaluator: {Summary}", trackName, artist, summary);
-                                }
-                                else if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
+                                // Decoupled Analyzer Architecture: LLM is the authoritative semantic evaluator when enabled;
+                                // Heuristic regex evaluator acts as standalone offline engine or error fallback.
+                                if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
                                 {
                                     try
                                     {
@@ -386,7 +376,34 @@ namespace Alify.Features.Spotify.Services
                                     }
                                     catch (Exception ex)
                                     {
-                                        _logger.LogWarning(ex, "Gemini 2.5 LLM analysis encountered an error for track {TrackName}. Relying on heuristic outcome.", trackName);
+                                        _logger.LogWarning(ex, "Gemini 2.5 LLM analysis encountered an error for track {TrackName}. Relying on heuristic fallback.", trackName);
+                                        var fallbackAnalysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+                                        var fallbackPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(fallbackAnalysis, policyPrefs);
+                                        if (fallbackPolicyEval.Decision == PolicyDecision.RecommendSkip)
+                                        {
+                                            evaluatedIsFlagged = true;
+                                            isFlagged = true;
+                                            currentTarget.IsFlagged = true;
+                                            var summary = string.Join("; ", fallbackPolicyEval.ReasonCodes);
+                                            evaluatedSkipReason = $"Lyrics content policy violation (Offline Fallback): {summary}";
+                                            skipReason = evaluatedSkipReason;
+                                            _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by heuristic fallback policy evaluator: {Summary}", trackName, artist, summary);
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+                                    var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);
+                                    if (policyEval.Decision == PolicyDecision.RecommendSkip)
+                                    {
+                                        evaluatedIsFlagged = true;
+                                        isFlagged = true;
+                                        currentTarget.IsFlagged = true;
+                                        var summary = string.Join("; ", policyEval.ReasonCodes);
+                                        evaluatedSkipReason = $"Lyrics content policy violation: {summary}";
+                                        skipReason = evaluatedSkipReason;
+                                        _logger.LogInformation("Track '{Track}' by '{Artist}' flagged by heuristic policy evaluator: {Summary}", trackName, artist, summary);
                                     }
                                 }
                             }

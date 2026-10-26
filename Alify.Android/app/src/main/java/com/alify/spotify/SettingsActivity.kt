@@ -105,6 +105,26 @@ class SettingsActivity : AppCompatActivity() {
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, profiles)
         binding.spProfileSettings.adapter = adapter
 
+        // Analysis Engine Mode Spinner
+        val engineModes = listOf(
+            "AI Semantic Engine (Authoritative: zero regex false flags)",
+            "Offline Heuristic Engine (On-device regex only, 0 tokens)",
+            "Hybrid Guardrails (Regex tripwire + AI verification)"
+        )
+        val modeAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, engineModes)
+        binding.spAnalysisMode.adapter = modeAdapter
+        binding.spAnalysisMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                binding.tvAnalysisModeHint.text = when (position) {
+                    0 -> "AI evaluates full lyrical nuance, Pidgin/slang, and intentional directives directly. Offline regex runs ONLY as fallback if network fails."
+                    1 -> "Pure on-device regex scanning. Zero API calls, zero tokens, works 100% offline."
+                    2 -> "Strict dual guardrails: runs fast regex tripwire first, then calls AI for semantic confirmation."
+                    else -> ""
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         // Strictness SeekBar
         binding.sbStrictnessSettings.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -194,6 +214,10 @@ class SettingsActivity : AppCompatActivity() {
         val savedProfile = filterPrefs.getInt("filter_profile", 0)
         binding.spProfileSettings.setSelection(savedProfile)
 
+        // Analysis Engine Mode
+        val savedMode = filterPrefs.getInt("analysis_mode", AnalysisMode.AI_SEMANTIC.ordinal)
+        binding.spAnalysisMode.setSelection(savedMode)
+
         // Strictness
         val savedStrictness = filterPrefs.getInt("filter_strictness", 10)
         binding.sbStrictnessSettings.progress = savedStrictness
@@ -214,6 +238,7 @@ class SettingsActivity : AppCompatActivity() {
         filterPrefs.edit()
             .putString("custom_ethos_prompt", binding.etCustomEthosPrompt.text?.toString()?.trim() ?: "")
             .putInt("filter_profile", binding.spProfileSettings.selectedItemPosition)
+            .putInt("analysis_mode", binding.spAnalysisMode.selectedItemPosition)
             .putInt("filter_strictness", binding.sbStrictnessSettings.progress)
             .putBoolean("filter_explicit", binding.cbExplicitSettings.isChecked)
             .putBoolean("enable_gemini", binding.cbEnableAi.isChecked)
