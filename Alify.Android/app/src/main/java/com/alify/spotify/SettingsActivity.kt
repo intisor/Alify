@@ -11,6 +11,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.alify.spotify.databinding.ActivitySettingsBinding
@@ -27,6 +28,30 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsBinding
     private lateinit var authManager: SpotifyAuthManager
 
+    private val importVaultLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            val success = PersistentVaultManager.importVaultFromUri(this, uri)
+            if (success) {
+                loadPreferences()
+                updateVaultStatus()
+                Toast.makeText(this, "Vault successfully imported & restored!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to import vault file", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val exportVaultLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        if (uri != null) {
+            val success = PersistentVaultManager.exportVaultToUri(this, uri)
+            if (success) {
+                Toast.makeText(this, "Vault backup successfully exported!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to export vault", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
@@ -37,6 +62,7 @@ class SettingsActivity : AppCompatActivity() {
         setupListeners()
         loadPreferences()
         displayAppVersion()
+        updateVaultStatus()
     }
 
     private fun displayAppVersion() {
@@ -93,6 +119,44 @@ class SettingsActivity : AppCompatActivity() {
         // Manual Update Checker
         binding.btnCheckUpdates.setOnClickListener {
             checkGitHubUpdateManually()
+        }
+
+        // Persistent Vault Actions
+        binding.btnBackupVault.setOnClickListener {
+            val success = PersistentVaultManager.saveVault(this)
+            updateVaultStatus()
+            if (success) {
+                Toast.makeText(this, "Vault backed up to Documents/Alify", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "No credentials to backup yet", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnRestoreVault.setOnClickListener {
+            val restored = PersistentVaultManager.restoreVaultIfAvailable(this, force = true)
+            if (restored) {
+                loadPreferences()
+                updateVaultStatus()
+                Toast.makeText(this, "Credentials restored from persistent vault!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "No persistent vault found on disk", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnExportVault.setOnClickListener {
+            try {
+                exportVaultLauncher.launch("alify_vault_backup.json")
+            } catch (e: Exception) {
+                Toast.makeText(this, "Cannot launch export: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnImportVault.setOnClickListener {
+            try {
+                importVaultLauncher.launch("*/*")
+            } catch (e: Exception) {
+                Toast.makeText(this, "Cannot launch file picker: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
 
         // Ethos Spinner
@@ -245,8 +309,29 @@ class SettingsActivity : AppCompatActivity() {
             .putString("gemini_api_key", binding.etAiApiKey.text?.toString()?.trim() ?: "")
             .apply()
 
+        PersistentVaultManager.saveVault(this)
+
         Toast.makeText(this, "Settings saved successfully", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    private fun updateVaultStatus() {
+        val hasDiskVault = PersistentVaultManager.hasVaultOnDisk(this)
+        if (hasDiskVault) {
+            binding.tvVaultStatus.text = "Status: ✓ Active in Documents/Alify (survives uninstall)"
+            binding.tvVaultStatus.setTextColor(getColor(R.color.spotify_green))
+        } else {
+            val spotifyPrefs = getSharedPreferences("alify_spotify_prefs", Context.MODE_PRIVATE)
+            val hasCredentials = !spotifyPrefs.getString("custom_client_id", null).isNullOrBlank() ||
+                                 !spotifyPrefs.getString("refresh_token", null).isNullOrBlank()
+            if (hasCredentials) {
+                binding.tvVaultStatus.text = "Status: Pending backup (tap Backup to persist)"
+                binding.tvVaultStatus.setTextColor(getColor(R.color.spotify_sub_text))
+            } else {
+                binding.tvVaultStatus.text = "Status: No credentials configured yet"
+                binding.tvVaultStatus.setTextColor(getColor(R.color.spotify_sub_text))
+            }
+        }
     }
 
     private fun openUrl(url: String) {

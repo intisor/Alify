@@ -103,6 +103,7 @@ class SpotifyAuthManager(private val context: Context) {
                 }
                 val expiresIn = json.optLong("expires_in", 3600)
                 expiresAt = System.currentTimeMillis() + (expiresIn * 1000)
+                PersistentVaultManager.saveVault(context)
                 return@withContext true
             }
         } catch (e: Exception) {
@@ -144,6 +145,7 @@ class SpotifyAuthManager(private val context: Context) {
                 }
                 val expiresIn = json.optLong("expires_in", 3600)
                 expiresAt = System.currentTimeMillis() + (expiresIn * 1000)
+                PersistentVaultManager.saveVault(context)
                 return@withContext accessToken
             }
         } catch (e: Exception) {

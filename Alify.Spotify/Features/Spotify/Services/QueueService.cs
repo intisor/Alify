@@ -268,6 +268,28 @@ namespace Alify.Features.Spotify.Services
 			{
 				return prefs;
 			}
+
+			// Check persistent disk storage in LocalApplicationData
+			try
+			{
+				var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+				var prefsFile = Path.Combine(appData, "Alify", "filter_prefs.json");
+				if (File.Exists(prefsFile))
+				{
+					var json = File.ReadAllText(prefsFile);
+					var loaded = System.Text.Json.JsonSerializer.Deserialize<UserFilterPreferences>(json);
+					if (loaded != null)
+					{
+						_cache.Set(prefsKey, loaded, TimeSpan.FromDays(30));
+						return loaded;
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "Could not read filter preferences from persistent disk storage.");
+			}
+
 			return new UserFilterPreferences();
 		}
 
@@ -280,6 +302,24 @@ namespace Alify.Features.Spotify.Services
 			var versionKey = $"policy_version_{userId}";
 			int currentVersion = _cache.TryGetValue(versionKey, out int v) ? v + 1 : 1;
 			_cache.Set(versionKey, currentVersion, TimeSpan.FromDays(30));
+
+			// Persist to disk in LocalApplicationData (survives app re-extractions and restarts)
+			try
+			{
+				var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+				var dir = Path.Combine(appData, "Alify");
+				if (!Directory.Exists(dir))
+				{
+					Directory.CreateDirectory(dir);
+				}
+				var prefsFile = Path.Combine(dir, "filter_prefs.json");
+				var json = System.Text.Json.JsonSerializer.Serialize(preferences, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+				File.WriteAllText(prefsFile, json);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogWarning(ex, "Could not save filter preferences to persistent disk storage.");
+			}
 
 			InvalidateQueue(userId);
 			_logger.LogInformation("Saved filter preferences for user {UserId} (Policy v{Version}): Profile={Profile}, Strictness={Strictness}, Explicit={Explicit}",

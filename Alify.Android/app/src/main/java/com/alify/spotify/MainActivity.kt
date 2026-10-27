@@ -32,6 +32,13 @@ class MainActivity : AppCompatActivity() {
 
         authManager = SpotifyAuthManager(this)
 
+        if (!authManager.isConnected()) {
+            val restored = PersistentVaultManager.restoreVaultIfAvailable(this)
+            if (restored) {
+                Toast.makeText(this, "Welcome back! Credentials restored from persistent vault.", Toast.LENGTH_LONG).show()
+            }
+        }
+
         requestNotificationPermission()
         setupUI()
         handleRedirectIntent(intent)
