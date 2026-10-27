@@ -126,40 +126,110 @@ namespace Alify.Features.Spotify.Services
 
 			var artist = trackObj.FullTrack.Artists?.FirstOrDefault()?.Name;
 			var trackName = trackObj.FullTrack.Name;
-			var trackId = trackObj.FullTrack.Id ?? $"{artist}_{trackName}";			if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(trackName)) return;			var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();			if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
-			{				lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);				_cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));			}			trackObj.Lyrics = lyrics;			if (trackObj.IsFlagged && string.IsNullOrEmpty(trackObj.FlagReason))
-			{				trackObj.FlagReason = "Spotify Explicit Tag [E]";
-			}			int policyVersion = _cache.TryGetValue($"policy_version_{userId}", out int pv) ? pv : 0;			var stanceCacheKey = $"stance_{userId}_v{policyVersion}_{userPrefs.Profile}_{userPrefs.StrictnessLevel}_{trackId}".ToLowerInvariant();			if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
-			{				if (cachedResult.IsFlagged)
-				{					trackObj.IsFlagged = true;					trackObj.FlagReason = cachedResult.SkipReason;
-				}				return;
+			var trackId = trackObj.FullTrack.Id ?? $"{artist}_{trackName}";
+			if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(trackName)) return;
+
+			var lyricCacheKey = $"lyrics_{artist}_{trackName}".ToLowerInvariant();
+			if (!_cache.TryGetValue(lyricCacheKey, out string? lyrics))
+			{
+				lyrics = await _freeLyricsProvider.GetLyricsAsync(artist, trackName);
+				_cache.Set(lyricCacheKey, lyrics ?? string.Empty, TimeSpan.FromHours(12));
+			}
+
+			trackObj.Lyrics = lyrics;
+
+			if (trackObj.IsFlagged && string.IsNullOrEmpty(trackObj.FlagReason))
+			{
+				trackObj.FlagReason = "Spotify Explicit Tag [E]";
+			}
+
+			int policyVersion = _cache.TryGetValue($"policy_version_{userId}", out int pv) ? pv : 0;
+			var stanceCacheKey = $"stance_{userId}_v{policyVersion}_{userPrefs.Profile}_{userPrefs.StrictnessLevel}_{trackId}".ToLowerInvariant();
+			if (_cache.TryGetValue(stanceCacheKey, out StanceEvaluationResult? cachedResult) && cachedResult != null)
+			{
+				if (cachedResult.IsFlagged)
+				{
+					trackObj.IsFlagged = true;
+					trackObj.FlagReason = cachedResult.SkipReason;
+				}
+				return;
 			}if (!string.IsNullOrWhiteSpace(lyrics))
-			{				var policyPrefs = userPrefs.ToPolicyPreferences();				var sourceVersion = _normalizer.Normalize(lyrics, sourceId: trackObj.FullTrack.Id);				var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);				var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);				// Extract confidence from the top heuristic finding, if available				double? heuristicConfidence = analysis.Findings.Count > 0
+			{
+				var policyPrefs = userPrefs.ToPolicyPreferences();
+				var sourceVersion = _normalizer.Normalize(lyrics, sourceId: trackObj.FullTrack.Id);
+
+				// Pure LLM Mode: Heuristic regex analyzer commented out (no keyword regex interference)
+				/*
+				var analysis = await _heuristicEngine.AnalyzeAsync(sourceVersion);
+
+				var policyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(analysis, policyPrefs);
+
+				// Extract confidence from the top heuristic finding, if available
+				double? heuristicConfidence = analysis.Findings.Count > 0
 				    ? analysis.Findings[0].Confidence
-				    : null;				string? heuristicUncertainty = analysis.Findings.Count > 0
+				    : null;
+				string? heuristicUncertainty = analysis.Findings.Count > 0
 				    ? analysis.Findings[0].Uncertainty
-				    : null;				if (policyEval.Decision == PolicyDecision.RecommendSkip)
-				{					trackObj.IsFlagged = true;					var summary = string.Join("; ", policyEval.ReasonCodes);					trackObj.FlagReason = $"Lyrics Violation: {summary}";					trackObj.Confidence = heuristicConfidence;					trackObj.Uncertainty = heuristicUncertainty;					_cache.Set(stanceCacheKey, new StanceEvaluationResult
-					{						IsFlagged = true,						SkipReason = trackObj.FlagReason,						Lyrics = lyrics
-					}, TimeSpan.FromHours(1));				}
-				// Evaluate Gemini LLM if enabled and available				AnalysisResult? geminiResult = null;				if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
-				{					try
-					{						geminiResult = await _geminiEngine.AnalyzeAsync(
+				    : null;
+
+				if (policyEval.Decision == PolicyDecision.RecommendSkip)
+				{
+					trackObj.IsFlagged = true;
+					var summary = string.Join("; ", policyEval.ReasonCodes);
+					trackObj.FlagReason = $"Lyrics Violation: {summary}";
+					trackObj.Confidence = heuristicConfidence;
+					trackObj.Uncertainty = heuristicUncertainty;
+					_cache.Set(stanceCacheKey, new StanceEvaluationResult
+					{
+						IsFlagged = true,
+						SkipReason = trackObj.FlagReason,
+						Lyrics = lyrics
+					}, TimeSpan.FromHours(1));
+				}
+				*/
+				// Evaluate Gemini LLM if enabled and available
+				AnalysisResult? geminiResult = null;
+				if (userPrefs.EnableGeminiLLM && _geminiEngine != null)
+				{
+					try
+					{
+						geminiResult = await _geminiEngine.AnalyzeAsync(
 							sourceVersion,
 							targetLanguage: "en",
 							profile: userPrefs.Profile,
-							strictnessLevel: userPrefs.StrictnessLevel);					}
+							strictnessLevel: userPrefs.StrictnessLevel);
+					}
 					catch (Exception ex)
-					{						_logger.LogWarning(ex, "Gemini 2.5 Flash analysis error during queue enrichment for track {TrackName}", trackName);
+					{
+						_logger.LogWarning(ex, "Gemini 2.5 Flash analysis error during queue enrichment for track {TrackName}", trackName);
 					}
-					if (geminiResult != null && geminiResult.Status == AnalysisStatus.Completed)
-					{						var geminiPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(geminiResult, policyPrefs);						if (geminiPolicyEval.Decision == PolicyDecision.RecommendSkip)
-					{						trackObj.IsFlagged = true;							var geminiSummary = string.Join("; ", geminiPolicyEval.ReasonCodes);							trackObj.FlagReason = $"{userPrefs.Profile} Ethos Violation ({geminiSummary})";							_logger.LogInformation("Track '{Track}' by '{Artist}' flagged by Gemini 2.5 Flash for profile {Profile}: {Summary}", trackName, artist, userPrefs.Profile, geminiSummary);							_cache.Set(stanceCacheKey, new StanceEvaluationResult
-						{							IsFlagged = true,							SkipReason = trackObj.FlagReason,							Lyrics = lyrics
-							}, TimeSpan.FromHours(1));							return;					}
+
+					if (geminiResult != null && geminiResult.Status == AnalysisStatus.Completed)
+					{
+						var geminiPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(geminiResult, policyPrefs);
+						if (geminiPolicyEval.Decision == PolicyDecision.RecommendSkip)
+					{
+						trackObj.IsFlagged = true;
+							var geminiSummary = string.Join("; ", geminiPolicyEval.ReasonCodes);
+							trackObj.FlagReason = $"{userPrefs.Profile} Ethos Violation ({geminiSummary})";
+							_logger.LogInformation("Track '{Track}' by '{Artist}' flagged by Gemini 2.5 Flash for profile {Profile}: {Summary}", trackName, artist, userPrefs.Profile, geminiSummary);
+							_cache.Set(stanceCacheKey, new StanceEvaluationResult
+						{
+							IsFlagged = true,
+							SkipReason = trackObj.FlagReason,
+							Lyrics = lyrics
+							}, TimeSpan.FromHours(1));
+							return;
 					}
-					// Extract confidence from the top Gemini finding, if available				if (trackObj.Confidence == null && geminiResult != null && geminiResult.Findings.Count > 0)
-					{					var topGeminiFinding = geminiResult.Findings[0];						trackObj.Confidence = topGeminiFinding.Confidence;						trackObj.Uncertainty = topGeminiFinding.Uncertainty;					}
+					}
+
+					// Extract confidence from the top Gemini finding, if available
+				if (trackObj.Confidence == null && geminiResult != null && geminiResult.Findings.Count > 0)
+					{
+					var topGeminiFinding = geminiResult.Findings[0];
+						trackObj.Confidence = topGeminiFinding.Confidence;
+						trackObj.Uncertainty = topGeminiFinding.Uncertainty;
+					}
 				}
 			}
 		}

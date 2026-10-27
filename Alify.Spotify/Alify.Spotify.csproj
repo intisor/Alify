@@ -9,6 +9,10 @@
     <SelfContained Condition="'$(PublishSingleFile)' == 'true'">true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract Condition="'$(PublishSingleFile)' == 'true'">true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile Condition="'$(PublishSingleFile)' == 'true'">true</EnableCompressionInSingleFile>
+    <ApplicationIcon>wwwroot\favicon.ico</ApplicationIcon>
+    <AssemblyTitle>Alify</AssemblyTitle>
+    <Product>Alify</Product>
+    <Version>1.4.3</Version>
   </PropertyGroup>
 
   <ItemGroup>

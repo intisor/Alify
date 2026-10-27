@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Alify.Lyrics</title>
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -13,7 +14,18 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
             <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">Alify.Lyrics</a>
+                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-page="/Index">
+                    <svg width="24" height="24" viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="108" height="108" rx="24" fill="#09120C" />
+                        <path d="M 54,20 C 69,20 81,24 81,37 C 81,61 68,77 54,86 C 40,77 27,61 27,37 C 27,24 39,20 54,20 Z" fill="#0F261A" stroke="#1DB954" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+                        <rect x="33.5" y="49" width="6" height="14" rx="3" fill="#1DB954" />
+                        <rect x="42" y="40" width="6" height="30" rx="3" fill="#00E676" />
+                        <rect x="50.5" y="32" width="7" height="44" rx="3.5" fill="#FFFFFF" />
+                        <rect x="60" y="40" width="6" height="30" rx="3" fill="#00E676" />
+                        <rect x="68.5" y="49" width="6" height="14" rx="3" fill="#1DB954" />
+                    </svg>
+                    <span>Alify.Lyrics</span>
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
