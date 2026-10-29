@@ -249,7 +249,7 @@ object SilentCorpusHarvester {
 
     private fun dispatchRemoteIfConfigured(context: Context, kind: String, payload: JSONObject) {
         try {
-            val prefs = context.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs = context.getSharedPreferences("alify_filter_prefs", Context.MODE_PRIVATE)
             val endpoint = prefs.getString("pref_telemetry_endpoint", null)?.trim()
             if (endpoint.isNullOrEmpty() || !endpoint.startsWith("https://")) return
 
