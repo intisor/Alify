@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -223,57 +226,111 @@ class FilterEngine(
 
         val keysWaterfall = buildProviderKeyWaterfall(geminiApiKey)
 
-        for (activeKey in keysWaterfall) {
-            val rawResponse = executeLlmWaterfallRequest(prompt, activeKey) ?: continue
-            val parsed = extractJsonObject(rawResponse) ?: continue
+        // Identify primary Groq and Gemini candidate keys
+        val groqKey = keysWaterfall.firstOrNull { it.startsWith("gsk_") }
+            ?: decodeKey(GROQ_FALLBACK_ENC)
+        val geminiKey = keysWaterfall.firstOrNull { !it.startsWith("gsk_") && !it.startsWith("sk-") }
+            ?: decodeKey(GEMINI_FALLBACK_ENC)
 
-            val flagged = parsed.optBoolean("flagged", false)
-            val reason = parsed.optString("reason", "Ethos Violation")
-
-            if (flagged) {
-                val flaggedLinesList = mutableListOf<String>()
-                val parsedLines = parsed.optJSONArray("flagged_lines")
-                if (parsedLines != null) {
-                    for (i in 0 until parsedLines.length()) {
-                        val l = parsedLines.optString(i)
-                        if (!l.isNullOrBlank()) flaggedLinesList.add(l.trim())
-                    }
-                }
-                val annotationsMap = mutableMapOf<String, String>()
-                val parsedExplanations = parsed.optJSONObject("explanations")
-                if (parsedExplanations != null) {
-                    val keys = parsedExplanations.keys()
-                    while (keys.hasNext()) {
-                        val k = keys.next()
-                        annotationsMap[k.trim()] = parsedExplanations.optString(k)
-                    }
-                } else {
-                    for (l in flaggedLinesList) {
-                        annotationsMap[l] = reason
-                    }
-                }
-
-                Log.i(TAG, "Track '$trackName' by '$artistName' FLAGGED by LLM: $reason")
-                return@withContext FilterResult(
-                    isFlagged = true,
-                    flagReason = "$profile Ethos: $reason",
-                    flaggedLines = flaggedLinesList,
-                    annotations = annotationsMap,
-                    isVerifiedByAi = true
-                )
-            } else {
-                val isUnverified = reason.contains("Unverified", ignoreCase = true)
-                Log.i(TAG, "Track '$trackName' by '$artistName' evaluated by LLM: $reason")
-                return@withContext FilterResult(
-                    isFlagged = false,
-                    flagReason = if (isUnverified) reason else "Verified Clean by AI ($reason)",
-                    isVerifiedByAi = !isUnverified
-                )
+        // Speculative Parallel Race: Launch Groq (ultra-fast ~0.8s) and Gemini (~1.2s) concurrently.
+        // Whichever valid response arrives first cancels the other and returns immediately.
+        val fastParallelResult = coroutineScope {
+            val groqAsync = async(Dispatchers.IO) {
+                if (groqKey.isNotBlank()) {
+                    executeLlmWaterfallRequest(prompt, groqKey)?.let { parseLlmResponse(it, trackName, artistName) }
+                } else null
             }
+            val geminiAsync = async(Dispatchers.IO) {
+                if (geminiKey.isNotBlank()) {
+                    executeLlmWaterfallRequest(prompt, geminiKey)?.let { parseLlmResponse(it, trackName, artistName) }
+                } else null
+            }
+
+            val winner = select<FilterResult?> {
+                groqAsync.onAwait { res -> res }
+                geminiAsync.onAwait { res -> res }
+            }
+
+            if (winner != null) {
+                groqAsync.cancel()
+                geminiAsync.cancel()
+                return@coroutineScope winner
+            }
+
+            // If the first one that finished was null/failed, check the other
+            val gRes = try { groqAsync.await() } catch (_: Exception) { null }
+            if (gRes != null) return@coroutineScope gRes
+
+            val gemRes = try { geminiAsync.await() } catch (_: Exception) { null }
+            return@coroutineScope gemRes
+        }
+
+        if (fastParallelResult != null) {
+            return@withContext fastParallelResult
+        }
+
+        // Secondary fallback: Try remaining waterfall keys sequentially (e.g. OpenRouter)
+        for (fallbackKey in keysWaterfall) {
+            if (fallbackKey == groqKey || fallbackKey == geminiKey) continue
+            val rawResponse = executeLlmWaterfallRequest(prompt, fallbackKey) ?: continue
+            val parsedRes = parseLlmResponse(rawResponse, trackName, artistName)
+            if (parsedRes != null) return@withContext parsedRes
         }
 
         Log.e(TAG, "All LLM providers in waterfall failed for '$trackName' by '$artistName'")
         return@withContext null
+    }
+
+    private fun parseLlmResponse(
+        rawResponse: String,
+        trackName: String,
+        artistName: String
+    ): FilterResult? {
+        val parsed = extractJsonObject(rawResponse) ?: return null
+
+        val flagged = parsed.optBoolean("flagged", false)
+        val reason = parsed.optString("reason", "Ethos Violation")
+
+        if (flagged) {
+            val flaggedLinesList = mutableListOf<String>()
+            val parsedLines = parsed.optJSONArray("flagged_lines")
+            if (parsedLines != null) {
+                for (i in 0 until parsedLines.length()) {
+                    val l = parsedLines.optString(i)
+                    if (!l.isNullOrBlank()) flaggedLinesList.add(l.trim())
+                }
+            }
+            val annotationsMap = mutableMapOf<String, String>()
+            val parsedExplanations = parsed.optJSONObject("explanations")
+            if (parsedExplanations != null) {
+                val keys = parsedExplanations.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    annotationsMap[k.trim()] = parsedExplanations.optString(k)
+                }
+            } else {
+                for (l in flaggedLinesList) {
+                    annotationsMap[l] = reason
+                }
+            }
+
+            Log.i(TAG, "Track '$trackName' by '$artistName' FLAGGED by LLM: $reason")
+            return FilterResult(
+                isFlagged = true,
+                flagReason = "$profile Ethos: $reason",
+                flaggedLines = flaggedLinesList,
+                annotations = annotationsMap,
+                isVerifiedByAi = true
+            )
+        } else {
+            val isUnverified = reason.contains("Unverified", ignoreCase = true)
+            Log.i(TAG, "Track '$trackName' by '$artistName' evaluated by LLM: $reason")
+            return FilterResult(
+                isFlagged = false,
+                flagReason = if (isUnverified) reason else "Verified Clean by AI ($reason)",
+                isVerifiedByAi = !isUnverified
+            )
+        }
     }
 
     private fun executeLlmWaterfallRequest(prompt: String, apiKey: String): String? {

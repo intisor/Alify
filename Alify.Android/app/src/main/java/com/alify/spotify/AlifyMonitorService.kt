@@ -52,8 +52,12 @@ class AlifyMonitorService : Service() {
         var lastFlaggedLines: List<String> = emptyList()
         var lastAnnotations: Map<String, String> = emptyMap()
 
+        // In-memory cache of evaluated tracks: trackKey -> Pair(FilterResult, lyrics)
+        val auditCache = java.util.concurrent.ConcurrentHashMap<String, Pair<FilterResult, String?>>()
+
         fun invalidateCurrentTrack() {
             // Forces re-audit when user changes settings or requests re-check
+            auditCache.clear()
             lastStatusBadge = "⏳ Re-auditing..."
         }
 
@@ -136,16 +140,31 @@ class AlifyMonitorService : Service() {
 
             // Reload fresh preferences before every track audit
             filterEngine = FilterEngine.fromPreferences(this)
-            lastStatusBadge = "⏳ Auditing with AI..."
-            updateNotification("Auditing: $trackName - $artistName")
 
-            // 1. Fetch Lyrics via 6-stage waterfall (LRCLIB -> Genius -> OVH -> LLM)
-            val aiKey = filterEngine.geminiApiKey
-            val lyrics = lrclibClient.getLyrics(artistName, trackName, aiKey)
-            lastLyrics = lyrics
+            val cacheKey = if (!trackId.isNullOrBlank()) trackId else "$artistName::$trackName".lowercase()
+            val cached = auditCache[cacheKey]
 
-            // 2. Evaluate via Multi-Provider LLM Waterfall
-            val result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
+            val result: FilterResult
+            val lyrics: String?
+
+            if (cached != null && lastStatusBadge != "⏳ Re-auditing...") {
+                result = cached.first
+                lyrics = cached.second
+                lastLyrics = lyrics
+                Log.d(TAG, "Instant zero-latency cache hit for track '$trackName': flagged=${result.isFlagged}")
+            } else {
+                lastStatusBadge = "⏳ Auditing with AI..."
+                updateNotification("Auditing: $trackName - $artistName")
+
+                // 1. Fetch Lyrics via parallel waterfall (LRCLIB + Genius parallel race)
+                val aiKey = filterEngine.geminiApiKey
+                lyrics = lrclibClient.getLyrics(artistName, trackName, aiKey)
+                lastLyrics = lyrics
+
+                // 2. Evaluate via Speculative Multi-Provider LLM Waterfall (Groq || Gemini parallel race)
+                result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
+                auditCache[cacheKey] = Pair(result, lyrics)
+            }
 
             lastFlagReason = result.flagReason
             lastFlaggedLines = result.flaggedLines
@@ -170,6 +189,50 @@ class AlifyMonitorService : Service() {
                 }
                 updateNotification("Playing: $trackName - $artistName")
             }
+
+            // Lookahead Queue Pre-Auditing: Quietly pre-audit the upcoming 1-2 tracks in the background
+            scope.launch {
+                preAuditUpcomingQueue(token)
+            }
+        }
+    }
+
+    private suspend fun preAuditUpcomingQueue(token: String) {
+        try {
+            val request = Request.Builder()
+                .url("https://api.spotify.com/v1/me/player/queue")
+                .header("Authorization", "Bearer $token")
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful || response.body == null) return
+                val body = response.body?.string() ?: return
+                val json = JSONObject(body)
+                val queueArray = json.optJSONArray("queue") ?: return
+
+                val countToPreAudit = minOf(2, queueArray.length())
+                for (i in 0 until countToPreAudit) {
+                    val qItem = queueArray.optJSONObject(i) ?: continue
+                    val qTrackId = qItem.optString("id")
+                    val qTrackName = qItem.optString("name")
+                    val qExplicit = qItem.optBoolean("explicit", false)
+                    val qArtists = qItem.optJSONArray("artists")
+                    val qArtistName = if (qArtists != null && qArtists.length() > 0) {
+                        qArtists.getJSONObject(0).optString("name")
+                    } else "Unknown Artist"
+
+                    val qKey = if (qTrackId.isNotBlank()) qTrackId else "$qArtistName::$qTrackName".lowercase()
+                    if (auditCache.containsKey(qKey)) continue
+
+                    Log.d(TAG, "Pre-auditing upcoming track in queue: '$qTrackName' by '$qArtistName'")
+                    val qLyrics = lrclibClient.getLyrics(qArtistName, qTrackName, filterEngine.geminiApiKey)
+                    val qResult = filterEngine.evaluate(qTrackName, qArtistName, qExplicit, qLyrics)
+                    auditCache[qKey] = Pair(qResult, qLyrics)
+                    Log.i(TAG, "Upcoming track '$qTrackName' pre-audited: flagged=${qResult.isFlagged}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Queue pre-auditing skipped or unavailable: ${e.message}")
         }
     }
 

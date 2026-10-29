@@ -4,6 +4,9 @@ import android.text.Html
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
@@ -67,39 +70,49 @@ class LrclibClient {
             if (it.isNotBlank()) return@withContext it
         }
 
-        // Stage 1: LRCLIB Direct Match (original titles)
-        fetchLrclibGet(rawArtist, rawTrack)?.let {
-            cacheAndReturn(cacheKey, cleanCacheKey, it)
-            return@withContext it
-        }
-
-        // Stage 2: LRCLIB Direct Match with normalized metadata
-        if (cleanTrack != rawTrack || cleanArtist != rawArtist) {
-            fetchLrclibGet(cleanArtist, cleanTrack)?.let {
-                cacheAndReturn(cacheKey, cleanCacheKey, it)
-                return@withContext it
+        // Parallel Tier 1: Race LRCLIB and Genius Direct Scraper concurrently
+        val tier1Lyrics = coroutineScope {
+            val lrclibAsync = async(Dispatchers.IO) {
+                fetchLrclibGet(rawArtist, rawTrack)
+                    ?: (if (cleanTrack != rawTrack || cleanArtist != rawArtist) fetchLrclibGet(cleanArtist, cleanTrack) else null)
+                    ?: fetchLrclibSearch(cleanArtist, cleanTrack)
             }
+            val geniusAsync = async(Dispatchers.IO) {
+                fetchGeniusDirect(cleanArtist, cleanTrack)
+            }
+
+            // Wait for whichever provider returns non-empty lyrics first
+            val fastResult = select<String?> {
+                lrclibAsync.onAwait { res -> if (!res.isNullOrBlank()) res else null }
+                geniusAsync.onAwait { res -> if (!res.isNullOrBlank()) res else null }
+            }
+
+            if (!fastResult.isNullOrBlank()) {
+                lrclibAsync.cancel()
+                geniusAsync.cancel()
+                return@coroutineScope fastResult
+            }
+
+            // If the first one that completed was empty, check the second
+            val lrclibRes = try { lrclibAsync.await() } catch (_: Exception) { null }
+            if (!lrclibRes.isNullOrBlank()) return@coroutineScope lrclibRes
+
+            val geniusRes = try { geniusAsync.await() } catch (_: Exception) { null }
+            return@coroutineScope geniusRes
         }
 
-        // Stage 3: LRCLIB Search Endpoint (tolerant fuzzy search)
-        fetchLrclibSearch(cleanArtist, cleanTrack)?.let {
+        tier1Lyrics?.let {
             cacheAndReturn(cacheKey, cleanCacheKey, it)
             return@withContext it
         }
 
-        // Stage 4: Direct Lightweight Genius Scraper (captures Afrobeats, street-hop, remixes)
-        fetchGeniusDirect(cleanArtist, cleanTrack)?.let {
-            cacheAndReturn(cacheKey, cleanCacheKey, it)
-            return@withContext it
-        }
-
-        // Stage 5: Public lyrics.ovh Fallback
+        // Tier 2 Fallback: Public lyrics.ovh
         fetchLyricsOvh(cleanArtist, cleanTrack)?.let {
             cacheAndReturn(cacheKey, cleanCacheKey, it)
             return@withContext it
         }
 
-        // Stage 6: Multi-Provider AI LLM Lyric Retrieval
+        // Tier 3 Fallback: Multi-Provider AI LLM Lyric Retrieval
         fetchLyricsFromLlm(cleanArtist, cleanTrack, aiApiKey)?.let {
             cacheAndReturn(cacheKey, cleanCacheKey, it)
             return@withContext it
