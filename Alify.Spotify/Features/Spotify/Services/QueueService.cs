@@ -207,6 +207,15 @@ namespace Alify.Features.Spotify.Services
 					if (geminiResult != null && geminiResult.Status == AnalysisStatus.Completed)
 					{
 						var geminiPolicyEval = DeterministicPolicyEvaluator.EvaluateStandaloneLyrics(geminiResult, policyPrefs);
+						SilentCorpusHarvester.RecordEvaluation(
+							trackName,
+							artist,
+							userPrefs.Profile,
+							userPrefs.StrictnessLevel,
+							lyrics,
+							geminiResult,
+							geminiPolicyEval.Decision == PolicyDecision.RecommendSkip,
+							string.Join("; ", geminiPolicyEval.ReasonCodes));
 						if (geminiPolicyEval.Decision == PolicyDecision.RecommendSkip)
 					{
 						trackObj.IsFlagged = true;

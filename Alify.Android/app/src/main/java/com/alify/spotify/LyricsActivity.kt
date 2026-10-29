@@ -8,6 +8,8 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +22,13 @@ class LyricsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLyricsBinding
     private val lrclibClient = LrclibClient()
+    private var currentTrackName: String = ""
+    private var currentArtistName: String = ""
+    private var currentIsFlagged: Boolean = false
+    private var currentFlagReason: String? = null
+    private var currentFlaggedLines: List<String> = emptyList()
+    private var currentAnnotations: Map<String, String> = emptyMap()
+    private var currentLyrics: String? = null
 
     companion object {
         const val EXTRA_TRACK_NAME = "extra_track_name"
@@ -66,8 +75,23 @@ class LyricsActivity : AppCompatActivity() {
         val lyrics = intent.getStringExtra(EXTRA_LYRICS) ?: AlifyMonitorService.lastLyrics
         val annotations = AlifyMonitorService.lastAnnotations
 
+        currentTrackName = trackName
+        currentArtistName = artistName
+        currentIsFlagged = isFlagged
+        currentFlagReason = flagReason
+        currentFlaggedLines = flaggedLines
+        currentAnnotations = annotations
+        currentLyrics = lyrics
+
         binding.tvLyricsTrackTitle.text = trackName
         binding.tvLyricsArtist.text = artistName
+
+        binding.tvLyricsStatusBadge.setOnClickListener {
+            showVerdictOverrideDialog(selectedLine = null)
+        }
+        binding.cardAuditSummary.setOnClickListener {
+            showVerdictOverrideDialog(selectedLine = null)
+        }
 
         updateAuditHeader(isFlagged, flagReason, flaggedLines)
 
@@ -133,6 +157,23 @@ class LyricsActivity : AppCompatActivity() {
                     AlifyMonitorService.lastFlagReason = evalResult.flagReason
                     AlifyMonitorService.lastFlaggedLines = evalResult.flaggedLines
                     AlifyMonitorService.lastAnnotations = evalResult.annotations
+
+                    currentIsFlagged = evalResult.isFlagged
+                    currentFlagReason = evalResult.flagReason
+                    currentFlaggedLines = evalResult.flaggedLines
+                    currentAnnotations = evalResult.annotations
+                    currentLyrics = fetchedLyrics
+
+                    SilentCorpusHarvester.recordEvaluation(
+                        context = this@LyricsActivity,
+                        trackName = trackName,
+                        artistName = artistName,
+                        profile = filterEngine.profile,
+                        strictness = filterEngine.strictness,
+                        customDirective = filterEngine.customEthosPrompt,
+                        lyrics = fetchedLyrics,
+                        result = evalResult
+                    )
 
                     updateAuditHeader(evalResult.isFlagged, evalResult.flagReason, evalResult.flaggedLines)
                     displayLyrics(fetchedLyrics, evalResult.flaggedLines, evalResult.annotations)
@@ -239,6 +280,9 @@ class LyricsActivity : AppCompatActivity() {
                     setPadding(dpToPx(28), dpToPx(4), 0, 0)
                 }
                 flaggedContainer.addView(calloutView)
+                flaggedContainer.setOnClickListener {
+                    showVerdictOverrideDialog(selectedLine = line)
+                }
 
                 binding.llLyricsContainer.addView(flaggedContainer)
             } else {
@@ -247,6 +291,9 @@ class LyricsActivity : AppCompatActivity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(0, dpToPx(3), 0, dpToPx(3))
+                    setOnClickListener {
+                        showVerdictOverrideDialog(selectedLine = line)
+                    }
                 }
 
                 val numView = TextView(this).apply {
@@ -270,6 +317,72 @@ class LyricsActivity : AppCompatActivity() {
 
             lineNumber++
         }
+    }
+
+    private fun showVerdictOverrideDialog(selectedLine: String?) {
+        val options = arrayOf(
+            "✓ Allow Song (Mark as Clean)",
+            "✕ Flag — Sexual / Innuendo",
+            "✕ Flag — Substance / Alcohol",
+            "✕ Flag — Profanity / Street Slang",
+            "✕ Flag — Blasphemy / Violence"
+        )
+
+        val title = if (!selectedLine.isNullOrBlank()) {
+            "Review Line: \"${selectedLine.take(42)}...\""
+        } else {
+            "Adjust Verdict: $currentTrackName"
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(options) { _, which ->
+                val newFlagged = which != 0
+                val newReason = when (which) {
+                    0 -> "Verified Clean"
+                    1 -> "Flagged: Sexual / Innuendo"
+                    2 -> "Flagged: Substance / Alcohol"
+                    3 -> "Flagged: Profanity / Slang"
+                    else -> "Flagged: Blasphemy / Violence"
+                }
+
+                val engine = FilterEngine.fromPreferences(this)
+                val updated = SilentCorpusHarvester.recordUserOverride(
+                    context = this,
+                    trackName = currentTrackName,
+                    artistName = currentArtistName,
+                    profile = engine.profile,
+                    strictness = engine.strictness,
+                    lyrics = currentLyrics,
+                    previousFlagged = currentIsFlagged,
+                    previousReason = currentFlagReason,
+                    previousLines = currentFlaggedLines,
+                    newFlagged = newFlagged,
+                    newReason = newReason,
+                    selectedLine = selectedLine
+                )
+
+                currentIsFlagged = updated.isFlagged
+                currentFlagReason = updated.flagReason
+                currentFlaggedLines = updated.flaggedLines
+                currentAnnotations = updated.annotations
+
+                AlifyMonitorService.isLastFlagged = updated.isFlagged
+                AlifyMonitorService.lastFlagReason = updated.flagReason
+                AlifyMonitorService.lastFlaggedLines = updated.flaggedLines
+                AlifyMonitorService.lastAnnotations = updated.annotations
+                val cacheKey = "${currentArtistName.trim().lowercase()}::${currentTrackName.trim().lowercase()}"
+                AlifyMonitorService.auditCache[cacheKey] = Pair(updated, currentLyrics)
+
+                updateAuditHeader(updated.isFlagged, updated.flagReason, updated.flaggedLines)
+                currentLyrics?.let {
+                    displayLyrics(it, updated.flaggedLines, updated.annotations)
+                }
+
+                Toast.makeText(this, "Song verdict updated", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun dpToPx(dp: Int): Int {

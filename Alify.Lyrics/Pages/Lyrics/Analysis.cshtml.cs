@@ -135,6 +135,15 @@ public class AnalysisModel : PageModel
 
         if (LatestAnalysis.Status == AnalysisStatus.Completed)
         {
+            SilentCorpusHarvester.RecordEvaluation(
+                trackName: SourceRecord.Title ?? sourceId,
+                artistName: SourceRecord.Artist ?? "Unknown",
+                profile: prefs.Profile,
+                strictnessLevel: prefs.StrictnessLevel,
+                lyrics: SourceRecord.CurrentVersion.RawText,
+                result: LatestAnalysis,
+                isFlagged: CurrentPolicy.Decision == PolicyDecision.RecommendSkip,
+                flagReason: string.Join("; ", CurrentPolicy.ReasonCodes));
             StatusMessage = $"{client.ModelName} structured stance analysis completed and saved to ledger.";
         }
         else
@@ -195,6 +204,12 @@ public class AnalysisModel : PageModel
         };
 
         await _repository.SaveReviewRecordAsync(review);
+        SilentCorpusHarvester.RecordPreferenceOverride(
+            sourceId: sourceId,
+            lyrics: SourceRecord.CurrentVersion.RawText,
+            chosenDisposition: parsedDisposition.ToString(),
+            chosenRationale: rationale.Trim(),
+            originalAnalysis: LatestAnalysis);
 
         Reviews = await _repository.GetReviewsForAnalysisAsync(analysisId);
         var prefs = PolicyPreferences.Default;

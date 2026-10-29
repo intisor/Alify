@@ -142,12 +142,17 @@ class AlifyMonitorService : Service() {
             filterEngine = FilterEngine.fromPreferences(this)
 
             val cacheKey = if (!trackId.isNullOrBlank()) trackId else "$artistName::$trackName".lowercase()
+            val userOverride = SilentCorpusHarvester.getUserOverride(this, artistName, trackName)
             val cached = auditCache[cacheKey]
 
             val result: FilterResult
             val lyrics: String?
 
-            if (cached != null && lastStatusBadge != "⏳ Re-auditing...") {
+            if (userOverride != null && lastStatusBadge != "⏳ Re-auditing...") {
+                result = userOverride
+                lyrics = cached?.second ?: LrclibClient.getCachedLyrics(artistName, trackName)
+                lastLyrics = lyrics
+            } else if (cached != null && lastStatusBadge != "⏳ Re-auditing...") {
                 result = cached.first
                 lyrics = cached.second
                 lastLyrics = lyrics
@@ -164,6 +169,18 @@ class AlifyMonitorService : Service() {
                 // 2. Evaluate via Speculative Multi-Provider LLM Waterfall (Groq || Gemini parallel race)
                 result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
                 auditCache[cacheKey] = Pair(result, lyrics)
+
+                // Silently harvest evaluation into persistent SFT ledger
+                SilentCorpusHarvester.recordEvaluation(
+                    context = this@AlifyMonitorService,
+                    trackName = trackName,
+                    artistName = artistName,
+                    profile = filterEngine.profile,
+                    strictness = filterEngine.strictness,
+                    customDirective = filterEngine.customEthosPrompt,
+                    lyrics = lyrics,
+                    result = result
+                )
             }
 
             lastFlagReason = result.flagReason
@@ -228,6 +245,16 @@ class AlifyMonitorService : Service() {
                     val qLyrics = lrclibClient.getLyrics(qArtistName, qTrackName, filterEngine.geminiApiKey)
                     val qResult = filterEngine.evaluate(qTrackName, qArtistName, qExplicit, qLyrics)
                     auditCache[qKey] = Pair(qResult, qLyrics)
+                    SilentCorpusHarvester.recordEvaluation(
+                        context = this@AlifyMonitorService,
+                        trackName = qTrackName,
+                        artistName = qArtistName,
+                        profile = filterEngine.profile,
+                        strictness = filterEngine.strictness,
+                        customDirective = filterEngine.customEthosPrompt,
+                        lyrics = qLyrics,
+                        result = qResult
+                    )
                     Log.i(TAG, "Upcoming track '$qTrackName' pre-audited: flagged=${qResult.isFlagged}")
                 }
             }
