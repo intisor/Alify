@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-android:
     name: Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     steps:
@@ -89,7 +89,7 @@ jobs:
   publish-github-release:
     name: Create GitHub Release
     needs: [build-android, build-desktop]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Download APK Artifact

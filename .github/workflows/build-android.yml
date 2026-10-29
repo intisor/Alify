@@ -16,7 +16,7 @@ permissions:
 jobs:
   build-apk:
     name: Build & Package Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     steps:
