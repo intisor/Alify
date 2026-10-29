@@ -69,6 +69,20 @@ class LyricsActivity : AppCompatActivity() {
         binding.tvLyricsTrackTitle.text = trackName
         binding.tvLyricsArtist.text = artistName
 
+        updateAuditHeader(isFlagged, flagReason, flaggedLines)
+
+        if (!lyrics.isNullOrBlank()) {
+            displayLyrics(lyrics, flaggedLines, annotations)
+        } else {
+            fetchAndAuditLyrics(trackName, artistName, isFlagged, flagReason, flaggedLines, annotations)
+        }
+    }
+
+    private fun updateAuditHeader(
+        isFlagged: Boolean,
+        flagReason: String?,
+        flaggedLines: List<String>
+    ) {
         if (isFlagged) {
             binding.tvLyricsStatusBadge.text = "✕ Flagged"
             binding.tvLyricsStatusBadge.setBackgroundResource(R.drawable.badge_flagged)
@@ -78,41 +92,56 @@ class LyricsActivity : AppCompatActivity() {
             binding.tvAuditSubtextNotice.text = if (count > 0) {
                 "$count offending verse(s) identified and annotated below."
             } else {
-                "Offending content identified by content auditor."
+                "Offending content identified by AI content auditor."
             }
         } else {
             binding.tvLyricsStatusBadge.text = "✓ Clean"
             binding.tvLyricsStatusBadge.setBackgroundResource(R.drawable.badge_clean)
             binding.cardAuditSummary.visibility = View.GONE
         }
-
-        if (!lyrics.isNullOrBlank()) {
-            displayLyrics(lyrics, flaggedLines, annotations)
-        } else {
-            fetchAndDisplayLyrics(trackName, artistName, isFlagged, flagReason, flaggedLines, annotations)
-        }
     }
 
-    private fun fetchAndDisplayLyrics(
+    private fun fetchAndAuditLyrics(
         trackName: String,
         artistName: String,
-        isFlagged: Boolean,
-        flagReason: String?,
-        flaggedLines: List<String>,
-        annotations: Map<String, String>
+        initialFlagged: Boolean,
+        initialReason: String?,
+        initialFlaggedLines: List<String>,
+        initialAnnotations: Map<String, String>
     ) {
         binding.pbLyricsLoading.visibility = View.VISIBLE
         binding.tvNoLyrics.visibility = View.GONE
 
         lifecycleScope.launch {
+            val filterEngine = FilterEngine.fromPreferences(this@LyricsActivity)
             val fetchedLyrics = withContext(Dispatchers.IO) {
-                lrclibClient.getLyrics(artistName, trackName)
+                lrclibClient.getLyrics(artistName, trackName, filterEngine.geminiApiKey)
             }
-            binding.pbLyricsLoading.visibility = View.GONE
 
             if (!fetchedLyrics.isNullOrBlank()) {
-                displayLyrics(fetchedLyrics, flaggedLines, annotations)
+                AlifyMonitorService.lastLyrics = fetchedLyrics
+
+                // If service hadn't finished auditing yet, audit directly now
+                if (!initialFlagged && initialFlaggedLines.isEmpty()) {
+                    binding.tvLyricsStatusBadge.text = "⏳ Auditing..."
+                    val evalResult = withContext(Dispatchers.IO) {
+                        filterEngine.evaluate(trackName, artistName, false, fetchedLyrics)
+                    }
+                    binding.pbLyricsLoading.visibility = View.GONE
+
+                    AlifyMonitorService.isLastFlagged = evalResult.isFlagged
+                    AlifyMonitorService.lastFlagReason = evalResult.flagReason
+                    AlifyMonitorService.lastFlaggedLines = evalResult.flaggedLines
+                    AlifyMonitorService.lastAnnotations = evalResult.annotations
+
+                    updateAuditHeader(evalResult.isFlagged, evalResult.flagReason, evalResult.flaggedLines)
+                    displayLyrics(fetchedLyrics, evalResult.flaggedLines, evalResult.annotations)
+                } else {
+                    binding.pbLyricsLoading.visibility = View.GONE
+                    displayLyrics(fetchedLyrics, initialFlaggedLines, initialAnnotations)
+                }
             } else {
+                binding.pbLyricsLoading.visibility = View.GONE
                 binding.tvNoLyrics.visibility = View.VISIBLE
             }
         }

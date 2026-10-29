@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ class AlifyMonitorService : Service() {
 
     private val serviceJob = Job()
     private val scope = CoroutineScope(Dispatchers.IO + serviceJob)
+    private var monitorLoopJob: Job? = null
     private val httpClient = OkHttpClient()
 
     private lateinit var authManager: SpotifyAuthManager
@@ -34,6 +36,7 @@ class AlifyMonitorService : Service() {
     private var lastTrackId: String? = null
 
     companion object {
+        private const val TAG = "AlifyMonitorService"
         const val CHANNEL_ID = "alify_playback_protection"
         const val NOTIFICATION_ID = 1001
 
@@ -42,12 +45,17 @@ class AlifyMonitorService : Service() {
 
         var lastTrackName: String = "No track playing"
         var lastArtistName: String = ""
-        var lastStatusBadge: String = "✓ Clean"
+        var lastStatusBadge: String = "✓ Ready"
         var isLastFlagged: Boolean = false
         var lastLyrics: String? = null
         var lastFlagReason: String? = null
         var lastFlaggedLines: List<String> = emptyList()
         var lastAnnotations: Map<String, String> = emptyMap()
+
+        fun invalidateCurrentTrack() {
+            // Forces re-audit when user changes settings or requests re-check
+            lastStatusBadge = "⏳ Re-auditing..."
+        }
 
         fun start(context: Context) {
             val intent = Intent(context, AlifyMonitorService::class.java)
@@ -69,14 +77,17 @@ class AlifyMonitorService : Service() {
         authManager = SpotifyAuthManager(this)
         filterEngine = FilterEngine.fromPreferences(this)
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Active - Halal / Ethos Protection On"))
+        startForeground(NOTIFICATION_ID, buildNotification("Active - Hujjify AI Protection On"))
         isRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         filterEngine = FilterEngine.fromPreferences(this)
-        scope.launch {
-            monitorLoop()
+        lastTrackId = null // Force fresh audit on service start/restart
+        if (monitorLoopJob?.isActive != true) {
+            monitorLoopJob = scope.launch {
+                monitorLoop()
+            }
         }
         return START_STICKY
     }
@@ -89,9 +100,9 @@ class AlifyMonitorService : Service() {
                     checkCurrentPlayback(token)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Error in monitorLoop: ${e.message}", e)
             }
-            delay(3500) // Poll every 3.5 seconds
+            delay(3000) // Poll every 3 seconds
         }
     }
 
@@ -121,18 +132,29 @@ class AlifyMonitorService : Service() {
             lastTrackName = trackName
             lastArtistName = artistName
 
-            if (trackId == lastTrackId) return
-            lastTrackId = trackId
+            if (trackId == lastTrackId && lastStatusBadge != "⏳ Re-auditing...") return
 
-            // Fetch Lyrics & Evaluate with multi-stage waterfall (including AI retrieval fallback)
-            val aiKey = if (filterEngine.enableGemini) filterEngine.geminiApiKey else null
+            // Reload fresh preferences before every track audit
+            filterEngine = FilterEngine.fromPreferences(this)
+            lastStatusBadge = "⏳ Auditing with AI..."
+            updateNotification("Auditing: $trackName - $artistName")
+
+            // 1. Fetch Lyrics via 6-stage waterfall (LRCLIB -> Genius -> OVH -> LLM)
+            val aiKey = filterEngine.geminiApiKey
             val lyrics = lrclibClient.getLyrics(artistName, trackName, aiKey)
+            lastLyrics = lyrics
+
+            // 2. Evaluate via Multi-Provider LLM Waterfall
             val result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
 
-            lastLyrics = lyrics
             lastFlagReason = result.flagReason
             lastFlaggedLines = result.flaggedLines
             lastAnnotations = result.annotations
+
+            // Mark trackId as processed if AI verified it or lyrics were evaluated
+            if (result.isVerifiedByAi || !lyrics.isNullOrBlank()) {
+                lastTrackId = trackId
+            }
 
             if (result.isFlagged) {
                 isLastFlagged = true
@@ -141,7 +163,11 @@ class AlifyMonitorService : Service() {
                 skipTrack(token)
             } else {
                 isLastFlagged = false
-                lastStatusBadge = "✓ Clean"
+                lastStatusBadge = if (result.isVerifiedByAi) {
+                    "✓ Clean (AI Verified)"
+                } else {
+                    "⚠️ ${result.flagReason ?: "Unverified"}"
+                }
                 updateNotification("Playing: $trackName - $artistName")
             }
         }
@@ -157,7 +183,7 @@ class AlifyMonitorService : Service() {
 
             httpClient.newCall(request).execute().close()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to skip track: ${e.message}", e)
         }
     }
 
@@ -184,7 +210,7 @@ class AlifyMonitorService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Alify Halal Protection")
+            .setContentTitle("Hujjify Audio Protection")
             .setContentText(statusText)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pendingIntent)

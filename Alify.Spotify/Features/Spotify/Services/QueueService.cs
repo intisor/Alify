@@ -273,8 +273,13 @@ namespace Alify.Features.Spotify.Services
 			try
 			{
 				var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-				var prefsFile = Path.Combine(appData, "Alify", "filter_prefs.json");
-				if (File.Exists(prefsFile))
+				var safeUser = string.Concat((string.IsNullOrWhiteSpace(userId) ? "default" : userId).Split(Path.GetInvalidFileNameChars()));
+				var userPrefsFile = Path.Combine(appData, "Alify", $"filter_prefs_{safeUser}.json");
+				var fallbackPrefsFile = Path.Combine(appData, "Alify", "filter_prefs.json");
+				var prefsFile = File.Exists(userPrefsFile)
+					? userPrefsFile
+					: (string.Equals(safeUser, "default", StringComparison.OrdinalIgnoreCase) && File.Exists(fallbackPrefsFile) ? fallbackPrefsFile : null);
+				if (prefsFile != null)
 				{
 					var json = File.ReadAllText(prefsFile);
 					var loaded = System.Text.Json.JsonSerializer.Deserialize<UserFilterPreferences>(json);
@@ -312,9 +317,13 @@ namespace Alify.Features.Spotify.Services
 				{
 					Directory.CreateDirectory(dir);
 				}
-				var prefsFile = Path.Combine(dir, "filter_prefs.json");
+				var safeUser = string.Concat((string.IsNullOrWhiteSpace(userId) ? "default" : userId).Split(Path.GetInvalidFileNameChars()));
 				var json = System.Text.Json.JsonSerializer.Serialize(preferences, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-				File.WriteAllText(prefsFile, json);
+				File.WriteAllText(Path.Combine(dir, $"filter_prefs_{safeUser}.json"), json);
+				if (string.Equals(safeUser, "default", StringComparison.OrdinalIgnoreCase))
+				{
+					File.WriteAllText(Path.Combine(dir, "filter_prefs.json"), json);
+				}
 			}
 			catch (Exception ex)
 			{

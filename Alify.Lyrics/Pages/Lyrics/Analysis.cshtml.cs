@@ -111,15 +111,15 @@ public class AnalysisModel : PageModel
         IGeminiModelClient client;
         if (trimmedKey.StartsWith("gsk_", StringComparison.OrdinalIgnoreCase))
         {
-            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "llama-3.3-70b-versatile", OpenAiCompatibleModelClient.DefaultGroqEndpoint);
+            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "qwen/qwen3.8-27b", OpenAiCompatibleModelClient.DefaultGroqEndpoint);
         }
         else if (trimmedKey.StartsWith("sk-", StringComparison.OrdinalIgnoreCase))
         {
-            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "meta-llama/llama-3.3-70b-instruct:free", OpenAiCompatibleModelClient.DefaultOpenRouterEndpoint);
+            client = new OpenAiCompatibleModelClient(new HttpClient(), trimmedKey, "openrouter/free", OpenAiCompatibleModelClient.DefaultOpenRouterEndpoint);
         }
         else
         {
-            client = new MsccGeminiModelClient(trimmedKey);
+            client = HttpGeminiModelClient.CreateResilientWaterfallClient(new HttpClient(), trimmedKey);
         }
 
         var consent = ProviderConsent.Granted(client.ModelName);

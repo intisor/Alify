@@ -136,7 +136,7 @@ public class UserFilterPreferencesTests
             NullLogger<QueueService>.Instance,
             lyricsProvider);
 
-        const string userId = "test-user-123";
+        string userId = $"test-user-{Guid.NewGuid():N}";
 
         // Initial default
         var initialPrefs = queueService.GetUserFilterPreferences(userId);

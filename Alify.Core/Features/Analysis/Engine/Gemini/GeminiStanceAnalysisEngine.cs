@@ -251,12 +251,41 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
             {
                 if (ev.StartLine >= 1 && ev.EndLine >= ev.StartLine && !string.IsNullOrWhiteSpace(ev.QuotedText))
                 {
-                    evidenceList.Add(new EvidenceReference
+                    var rawQuote = ev.QuotedText.Trim();
+                    var candidateRef = new EvidenceReference
                     {
                         StartLine = ev.StartLine,
                         EndLine = ev.EndLine,
-                        QuotedText = ev.QuotedText.Trim()
-                    });
+                        QuotedText = rawQuote
+                    };
+
+                    // Auto-snap line numbers / substring quotes to canonical lyric lines if the LLM
+                    // had an off-by-one line index (due to headers/blank lines) or quoted a clause of a line,
+                    // while preserving strict rejection for genuinely fabricated quotes.
+                    if (!EvidenceValidator.ValidateCitation(candidateRef, source).IsValid)
+                    {
+                        var matchedLine = source.Lines.FirstOrDefault(l =>
+                            l.Kind == SourceLineKind.Lyric &&
+                            string.Equals(l.CanonicalText, rawQuote, StringComparison.OrdinalIgnoreCase))
+                            ?? (rawQuote.Length >= 4
+                                ? source.Lines.FirstOrDefault(l =>
+                                    l.Kind == SourceLineKind.Lyric &&
+                                    (l.CanonicalText.Contains(rawQuote, StringComparison.OrdinalIgnoreCase) ||
+                                     (l.CanonicalText.Length >= 4 && rawQuote.Contains(l.CanonicalText, StringComparison.OrdinalIgnoreCase))))
+                                : null);
+
+                        if (matchedLine != null)
+                        {
+                            candidateRef = new EvidenceReference
+                            {
+                                StartLine = matchedLine.LineNumber,
+                                EndLine = matchedLine.LineNumber,
+                                QuotedText = matchedLine.CanonicalText
+                            };
+                        }
+                    }
+
+                    evidenceList.Add(candidateRef);
                 }
             }
 
@@ -309,7 +338,14 @@ public class GeminiStanceAnalysisEngine : IStanceAnalysisEngine
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
-        var trimmed = text.Trim();
+        // Strip <think>...</think> reasoning blocks emitted by Oct 2026 reasoning models (e.g., Qwen 3.8)
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"<think>[\s\S]*?</think>",
+            string.Empty,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+        var trimmed = string.IsNullOrWhiteSpace(cleaned) ? text.Trim() : cleaned;
 
         // 1. Check for ```json ... ``` code fence anywhere in text
         int jsonBlockStart = trimmed.IndexOf("```json", StringComparison.OrdinalIgnoreCase);

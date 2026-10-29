@@ -12,11 +12,11 @@ public class MsccGeminiModelClient : IGeminiModelClient
     private readonly string _apiKey;
     public string ModelName { get; }
 
-    public MsccGeminiModelClient(string apiKey, string modelName = "gemini-2.5-flash")
+    public MsccGeminiModelClient(string apiKey, string modelName = "gemini-3.5-flash")
     {
         if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("API key cannot be empty.", nameof(apiKey));
         _apiKey = apiKey;
-        ModelName = string.IsNullOrWhiteSpace(modelName) ? "gemini-2.5-flash" : modelName;
+        ModelName = string.IsNullOrWhiteSpace(modelName) ? "gemini-3.5-flash" : modelName;
     }
 
     public async Task<string> GenerateContentAsync(string prompt, CancellationToken cancellationToken = default)

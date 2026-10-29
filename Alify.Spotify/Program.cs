@@ -89,19 +89,16 @@ builder.Services.AddHttpClient<FreeLyricsProviderService>();
 builder.Services.AddSingleton<FreeLyricsProviderService>();
 builder.Services.AddSingleton<Alify.Core.Services.ArtistLyricService>();
 
-// Register Gemini 2.5 Flash LLM engine if API key is present
+// Register Oct 2026 Multi-Provider LLM Waterfall Engine (Groq Qwen 3.8 / GPT-OSS -> Gemini 3.5 Flash -> OpenRouter)
 var geminiApiKey = builder.Configuration["ApiKeys:Gemini:ApiKey"];
-if (!string.IsNullOrWhiteSpace(geminiApiKey))
+builder.Services.AddSingleton<IGeminiModelClient>(sp =>
 {
-    builder.Services.AddSingleton<IGeminiModelClient>(sp =>
-    {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        return new HttpGeminiModelClient(httpClient, geminiApiKey, "gemini-2.5-flash");
-    });
-    builder.Services.AddSingleton(ProviderConsent.Granted("gemini-2.5-flash"));
-    builder.Services.AddSingleton(new BudgetLedger(200));
-    builder.Services.AddSingleton<GeminiStanceAnalysisEngine>();
-}
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+    return HttpGeminiModelClient.CreateResilientWaterfallClient(httpClient, geminiApiKey);
+});
+builder.Services.AddSingleton(ProviderConsent.Granted("qwen/qwen3.8-27b"));
+builder.Services.AddSingleton(new BudgetLedger(5000));
+builder.Services.AddSingleton<GeminiStanceAnalysisEngine>();
 
 // Add SSE and Spotify services
 builder.Services.AddSingleton<QueueService>();

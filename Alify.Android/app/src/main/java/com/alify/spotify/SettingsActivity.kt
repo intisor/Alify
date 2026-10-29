@@ -310,6 +310,7 @@ class SettingsActivity : AppCompatActivity() {
             .apply()
 
         PersistentVaultManager.saveVault(this)
+        AlifyMonitorService.invalidateCurrentTrack()
 
         Toast.makeText(this, "Settings saved successfully", Toast.LENGTH_SHORT).show()
         finish()
