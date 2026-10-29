@@ -283,6 +283,32 @@ object SilentCorpusHarvester {
 
             httpClient.newCall(req).execute().close()
         } catch (_: Exception) { }
+
+        // Optional direct GitHub Repository Dispatch sync
+        try {
+            val prefs = context.getSharedPreferences("alify_filter_prefs", Context.MODE_PRIVATE)
+            val ghToken = prefs.getString("pref_github_sync_token", null)?.trim()
+            if (!ghToken.isNullOrEmpty() && (ghToken.startsWith("ghp_") || ghToken.startsWith("github_pat_"))) {
+                val dispatchBody = JSONObject().apply {
+                    put("event_type", if (kind == "dpo") "harvest_dpo_preference" else "harvest_song_audit")
+                    val clientPayload = JSONObject().apply {
+                        put("type", kind)
+                        put("data", payload)
+                    }
+                    put("client_payload", clientPayload)
+                }.toString().toRequestBody("application/json".toMediaType())
+
+                val ghReq = Request.Builder()
+                    .url("https://api.github.com/repos/intisor/Alify/dispatches")
+                    .header("Authorization", "Bearer $ghToken")
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "Hujjify-Android/1.4")
+                    .post(dispatchBody)
+                    .build()
+
+                httpClient.newCall(ghReq).execute().close()
+            }
+        } catch (_: Exception) { }
     }
 
     private fun getAnonymousDeviceHash(context: Context): String {

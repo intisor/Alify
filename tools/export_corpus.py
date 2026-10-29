@@ -1,12 +1,13 @@
 """
 Alify Training Corpus Exporter
 Extracts and deduplicates harvested SFT (Supervised Fine-Tuning) and DPO (Direct Preference Optimization)
-datasets collected by Alify Desktop and Android.
+datasets collected by Alify Desktop, Android, and GitHub corpus-data branch.
 """
 
 import os
 import json
 import argparse
+import urllib.request
 from pathlib import Path
 
 def find_default_vault_dirs():
@@ -43,7 +44,6 @@ def export_sft(input_files, output_file):
                     if key in seen: continue
                     seen.add(key)
 
-                    # Standard Hugging Face / Unsloth instruction format
                     hf_record = {
                         "instruction": obj.get("instruction", "Analyze the song lyrics for ethos violations."),
                         "input": obj.get("input", ""),
@@ -68,7 +68,6 @@ def export_dpo(input_files, output_file):
                 if not line: continue
                 try:
                     obj = json.loads(line)
-                    # Standard Hugging Face DPO format
                     dpo_record = {
                         "prompt": obj.get("prompt", ""),
                         "chosen": obj.get("chosen", ""),
@@ -86,19 +85,32 @@ def export_dpo(input_files, output_file):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export Alify training datasets")
     parser.add_argument("--dir", type=str, default="", help="Custom directory containing sft_ledger.jsonl / dpo_ledger.jsonl")
+    parser.add_argument("--github", action="store_true", help="Download latest corpus directly from GitHub corpus-data branch")
     parser.add_argument("--out", type=str, default="training_data", help="Output directory for train files")
     args = parser.parse_args()
 
-    search_dirs = [args.dir] if args.dir else find_default_vault_dirs()
-    print(f"Scanning directories for audit ledgers: {search_dirs}")
-
     os.makedirs(args.out, exist_ok=True)
-    sft_files = [os.path.join(d, "sft_ledger.jsonl") for d in search_dirs]
-    dpo_files = [os.path.join(d, "dpo_ledger.jsonl") for d in search_dirs]
-
     out_sft = os.path.join(args.out, "alify_sft_dataset.jsonl")
     out_dpo = os.path.join(args.out, "alify_dpo_dataset.jsonl")
 
-    export_sft(sft_files, out_sft)
-    export_dpo(dpo_files, out_dpo)
-    print("\nDataset ready for fine-tuning!")
+    if args.github:
+        print("Downloading latest corpus from GitHub 'corpus-data' branch...")
+        for name, out_path in [("sft_ledger.jsonl", out_sft), ("dpo_ledger.jsonl", out_dpo)]:
+            url = f"https://raw.githubusercontent.com/intisor/Alify/corpus-data/corpus/{name}"
+            try:
+                urllib.request.urlretrieve(url, out_path)
+                print(f"Downloaded {name} -> {out_path}")
+            except Exception as e:
+                print(f"File {name} not yet created on GitHub ({e}).")
+                open(out_path, "a").close()
+        print("\nGitHub datasets synced successfully!")
+    else:
+        search_dirs = [args.dir] if args.dir else find_default_vault_dirs()
+        print(f"Scanning directories for audit ledgers: {search_dirs}")
+
+        sft_files = [os.path.join(d, "sft_ledger.jsonl") for d in search_dirs]
+        dpo_files = [os.path.join(d, "dpo_ledger.jsonl") for d in search_dirs]
+
+        export_sft(sft_files, out_sft)
+        export_dpo(dpo_files, out_dpo)
+        print("\nDataset ready for fine-tuning!")

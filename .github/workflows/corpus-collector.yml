@@ -1,0 +1,51 @@
+name: Automated Song Corpus Collector
+
+on:
+  repository_dispatch:
+    types: [harvest_song_audit, harvest_dpo_preference]
+  workflow_dispatch:
+    inputs:
+      data_type:
+        description: 'Dataset type (sft or dpo)'
+        required: true
+        default: 'sft'
+      json_payload:
+        description: 'Single JSON record'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  collect-song-data:
+    name: Record Community Audit Record
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Corpus Data Branch
+        uses: actions/checkout@v4
+        with:
+          ref: corpus-data
+          fetch-depth: 1
+
+      - name: Append Audit Record
+        run: |
+          mkdir -p corpus
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TYPE="${{ github.event.inputs.data_type }}"
+            PAYLOAD='${{ github.event.inputs.json_payload }}'
+          else
+            TYPE="${{ github.event.client_payload.type }}"
+            PAYLOAD='${{ toJson(github.event.client_payload.data) }}'
+          fi
+
+          if [ "$TYPE" = "dpo" ]; then
+            echo "$PAYLOAD" >> corpus/dpo_ledger.jsonl
+          else
+            echo "$PAYLOAD" >> corpus/sft_ledger.jsonl
+          fi
+
+          git config user.name "Alify-Harvester[bot]"
+          git config user.email "harvester@alify.app"
+          git add corpus/*.jsonl
+          git commit -m "data(corpus): add $TYPE song audit [skip ci]" || exit 0
+          git push origin corpus-data
