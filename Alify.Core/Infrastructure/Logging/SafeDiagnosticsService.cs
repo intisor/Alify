@@ -10,7 +10,7 @@ namespace Alify.Core.Infrastructure.Logging;
 public class SafeDiagnosticsService
 {
     private static readonly Regex BearerTokenRegex = new(@"Bearer\s+[A-Za-z0-9_\-\.]{15,}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex GeminiApiKeyRegex = new(@"AIza[0-9A-Za-z\-_]{30,45}", RegexOptions.Compiled);
+    private static readonly Regex GeminiApiKeyRegex = new(@"(AIza[0-9A-Za-z\-_]{30,45}|AQ\.[0-9A-Za-z\-_]{30,60})", RegexOptions.Compiled);
     private static readonly Regex GenericSecretRegex = new(@"(api[_-]?key|client[_-]?secret|token|verifier|password)\s*[:=]\s*[""']?([^""'\s]+)[""']?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly ISqliteLedgerRepository _repository;

@@ -221,7 +221,7 @@
                     app:boxCornerRadiusTopStart="8dp"
                     app:boxStrokeColor="@color/spotify_green"
                     app:endIconMode="password_toggle"
-                    app:helperText="Supports Gemini (AIza...), OpenRouter (sk-...), Groq (gsk_...)"
+                    app:helperText="Supports Gemini (AIza... / AQ....), OpenRouter (sk-...), Groq (gsk_...)"
                     app:helperTextTextColor="@color/spotify_sub_text"
                     app:hintTextColor="@color/spotify_sub_text">
 
