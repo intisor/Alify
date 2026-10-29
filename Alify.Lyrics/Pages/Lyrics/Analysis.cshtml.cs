@@ -136,11 +136,11 @@ public class AnalysisModel : PageModel
         if (LatestAnalysis.Status == AnalysisStatus.Completed)
         {
             SilentCorpusHarvester.RecordEvaluation(
-                trackName: SourceRecord.Title ?? sourceId,
-                artistName: SourceRecord.Artist ?? "Unknown",
-                profile: prefs.Profile,
-                strictnessLevel: prefs.StrictnessLevel,
-                lyrics: SourceRecord.CurrentVersion.RawText,
+                trackName: SourceRecord.Recording.Title ?? sourceId,
+                artistName: string.Join(", ", SourceRecord.Recording.Artists),
+                profile: FilterProfile.General,
+                strictnessLevel: 5,
+                lyrics: string.Join("\n", SourceRecord.CurrentVersion.Lines.Select(l => l.CanonicalText)),
                 result: LatestAnalysis,
                 isFlagged: CurrentPolicy.Decision == PolicyDecision.RecommendSkip,
                 flagReason: string.Join("; ", CurrentPolicy.ReasonCodes));
@@ -206,7 +206,7 @@ public class AnalysisModel : PageModel
         await _repository.SaveReviewRecordAsync(review);
         SilentCorpusHarvester.RecordPreferenceOverride(
             sourceId: sourceId,
-            lyrics: SourceRecord.CurrentVersion.RawText,
+            lyrics: string.Join("\n", SourceRecord.CurrentVersion.Lines.Select(l => l.CanonicalText)),
             chosenDisposition: parsedDisposition.ToString(),
             chosenRationale: rationale.Trim(),
             originalAnalysis: LatestAnalysis);
