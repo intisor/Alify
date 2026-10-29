@@ -49,13 +49,13 @@ jobs:
       - name: Stage APK for Release
         run: |
           mkdir -p release-assets
-          cp Alify.Android/app/build/outputs/apk/release/app-release.apk release-assets/Alify.apk
+          cp Alify.Android/app/build/outputs/apk/release/*.apk release-assets/Hujjify.apk || cp Alify.Android/app/build/outputs/apk/release/app-release.apk release-assets/Hujjify.apk
 
       - name: Upload APK Staging Artifact
         uses: actions/upload-artifact@v4
         with:
           name: staged-apk
-          path: release-assets/Alify.apk
+          path: release-assets/Hujjify.apk
 
   build-desktop:
     name: Build Windows Desktop Executable
@@ -108,7 +108,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            final-release/Alify.apk
+            final-release/Hujjify.apk
             final-release/Alify-Windows-x64.zip
           generate_release_notes: true
           draft: false

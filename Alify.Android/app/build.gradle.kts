@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+base {
+    archivesName.set("Hujjify")
+}
+
 android {
     namespace = "com.alify.spotify"
     compileSdk = 34
@@ -11,8 +15,8 @@ android {
         applicationId = "com.alify.spotify"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.5.0"
+        versionCode = 15
+        versionName = "1.5.1"
 
         manifestPlaceholders["redirectSchemeName"] = "alify"
         manifestPlaceholders["redirectHostName"] = "callback"
