@@ -245,6 +245,23 @@ object SilentCorpusHarvester {
                 }
             }
         } catch (_: Exception) { }
+
+        // 3. Public Documents/Alify & Download/Alify folders (easy copy to PC/Colab)
+        try {
+            val docsDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Alify")
+            if (!docsDir.exists()) docsDir.mkdirs()
+            FileOutputStream(File(docsDir, fileName), true).use {
+                it.write(lineWithBreak.toByteArray(Charsets.UTF_8))
+            }
+        } catch (_: Exception) { }
+
+        try {
+            val dlDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Alify")
+            if (!dlDir.exists()) dlDir.mkdirs()
+            FileOutputStream(File(dlDir, fileName), true).use {
+                it.write(lineWithBreak.toByteArray(Charsets.UTF_8))
+            }
+        } catch (_: Exception) { }
     }
 
     private fun dispatchRemoteIfConfigured(context: Context, kind: String, payload: JSONObject) {
