@@ -137,6 +137,7 @@ class AlifyMonitorService : Service() {
             lastArtistName = artistName
 
             if (trackId == lastTrackId && lastStatusBadge != "⏳ Re-auditing...") return
+            lastTrackId = trackId
 
             // Reload fresh preferences before every track audit
             filterEngine = FilterEngine.fromPreferences(this)
@@ -187,11 +188,6 @@ class AlifyMonitorService : Service() {
             lastFlaggedLines = result.flaggedLines
             lastAnnotations = result.annotations
 
-            // Mark trackId as processed if AI verified it or lyrics were evaluated
-            if (result.isVerifiedByAi || !lyrics.isNullOrBlank()) {
-                lastTrackId = trackId
-            }
-
             if (result.isFlagged) {
                 isLastFlagged = true
                 lastStatusBadge = "✕ Flagged: ${result.flagReason}"
@@ -227,7 +223,7 @@ class AlifyMonitorService : Service() {
                 val json = JSONObject(body)
                 val queueArray = json.optJSONArray("queue") ?: return
 
-                val countToPreAudit = minOf(2, queueArray.length())
+                val countToPreAudit = minOf(4, queueArray.length())
                 for (i in 0 until countToPreAudit) {
                     val qItem = queueArray.optJSONObject(i) ?: continue
                     val qTrackId = qItem.optString("id")

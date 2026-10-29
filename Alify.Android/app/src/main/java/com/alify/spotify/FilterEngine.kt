@@ -4,10 +4,11 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -108,8 +109,8 @@ class FilterEngine(
     }
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(18, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
         .build()
 
     /* REGEX HEURISTICS COMMENTED OFF - Pure LLM Semantic Evaluation is authoritative
@@ -233,36 +234,37 @@ class FilterEngine(
             ?: decodeKey(GEMINI_FALLBACK_ENC)
 
         // Speculative Parallel Race: Launch Groq (ultra-fast ~0.8s) and Gemini (~1.2s) concurrently.
-        // Whichever valid response arrives first cancels the other and returns immediately.
+        // First valid, non-null FilterResult returned wins and cancels the other.
         val fastParallelResult = coroutineScope {
-            val groqAsync = async(Dispatchers.IO) {
-                if (groqKey.isNotBlank()) {
-                    executeLlmWaterfallRequest(prompt, groqKey)?.let { parseLlmResponse(it, trackName, artistName) }
-                } else null
+            val channel = Channel<FilterResult>(2)
+            val j1 = launch(Dispatchers.IO) {
+                try {
+                    if (groqKey.isNotBlank()) {
+                        val raw = executeLlmWaterfallRequest(prompt, groqKey)
+                        if (raw != null) {
+                            parseLlmResponse(raw, trackName, artistName)?.let { channel.trySend(it) }
+                        }
+                    }
+                } catch (_: Exception) { }
             }
-            val geminiAsync = async(Dispatchers.IO) {
-                if (geminiKey.isNotBlank()) {
-                    executeLlmWaterfallRequest(prompt, geminiKey)?.let { parseLlmResponse(it, trackName, artistName) }
-                } else null
+            val j2 = launch(Dispatchers.IO) {
+                try {
+                    if (geminiKey.isNotBlank()) {
+                        val raw = executeLlmWaterfallRequest(prompt, geminiKey)
+                        if (raw != null) {
+                            parseLlmResponse(raw, trackName, artistName)?.let { channel.trySend(it) }
+                        }
+                    }
+                } catch (_: Exception) { }
             }
 
-            val winner = select<FilterResult?> {
-                groqAsync.onAwait { res -> res }
-                geminiAsync.onAwait { res -> res }
+            val winner = withTimeoutOrNull(4000) {
+                channel.receiveCatching().getOrNull()
             }
 
-            if (winner != null) {
-                groqAsync.cancel()
-                geminiAsync.cancel()
-                return@coroutineScope winner
-            }
-
-            // If the first one that finished was null/failed, check the other
-            val gRes = try { groqAsync.await() } catch (_: Exception) { null }
-            if (gRes != null) return@coroutineScope gRes
-
-            val gemRes = try { geminiAsync.await() } catch (_: Exception) { null }
-            return@coroutineScope gemRes
+            j1.cancel()
+            j2.cancel()
+            winner
         }
 
         if (fastParallelResult != null) {

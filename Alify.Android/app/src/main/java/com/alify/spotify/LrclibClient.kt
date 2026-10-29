@@ -4,10 +4,11 @@ import android.text.Html
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -34,8 +35,8 @@ class LrclibClient {
     }
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -70,35 +71,31 @@ class LrclibClient {
             if (it.isNotBlank()) return@withContext it
         }
 
-        // Parallel Tier 1: Race LRCLIB and Genius Direct Scraper concurrently
+        // Parallel Tier 1: Race LRCLIB and Genius Direct Scraper concurrently (first non-empty result wins)
         val tier1Lyrics = coroutineScope {
-            val lrclibAsync = async(Dispatchers.IO) {
-                fetchLrclibGet(rawArtist, rawTrack)
-                    ?: (if (cleanTrack != rawTrack || cleanArtist != rawArtist) fetchLrclibGet(cleanArtist, cleanTrack) else null)
-                    ?: fetchLrclibSearch(cleanArtist, cleanTrack)
+            val channel = Channel<String>(2)
+            val j1 = launch(Dispatchers.IO) {
+                try {
+                    val res = fetchLrclibGet(rawArtist, rawTrack)
+                        ?: (if (cleanTrack != rawTrack || cleanArtist != rawArtist) fetchLrclibGet(cleanArtist, cleanTrack) else null)
+                        ?: fetchLrclibSearch(cleanArtist, cleanTrack)
+                    if (!res.isNullOrBlank()) channel.trySend(res)
+                } catch (_: Exception) { }
             }
-            val geniusAsync = async(Dispatchers.IO) {
-                fetchGeniusDirect(cleanArtist, cleanTrack)
-            }
-
-            // Wait for whichever provider returns non-empty lyrics first
-            val fastResult = select<String?> {
-                lrclibAsync.onAwait { res -> if (!res.isNullOrBlank()) res else null }
-                geniusAsync.onAwait { res -> if (!res.isNullOrBlank()) res else null }
-            }
-
-            if (!fastResult.isNullOrBlank()) {
-                lrclibAsync.cancel()
-                geniusAsync.cancel()
-                return@coroutineScope fastResult
+            val j2 = launch(Dispatchers.IO) {
+                try {
+                    val res = fetchGeniusDirect(cleanArtist, cleanTrack)
+                    if (!res.isNullOrBlank()) channel.trySend(res)
+                } catch (_: Exception) { }
             }
 
-            // If the first one that completed was empty, check the second
-            val lrclibRes = try { lrclibAsync.await() } catch (_: Exception) { null }
-            if (!lrclibRes.isNullOrBlank()) return@coroutineScope lrclibRes
+            val winner = withTimeoutOrNull(3500) {
+                channel.receiveCatching().getOrNull()
+            }
 
-            val geniusRes = try { geniusAsync.await() } catch (_: Exception) { null }
-            return@coroutineScope geniusRes
+            j1.cancel()
+            j2.cancel()
+            winner
         }
 
         tier1Lyrics?.let {
