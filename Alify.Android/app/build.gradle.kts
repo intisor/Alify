@@ -15,8 +15,8 @@ android {
         applicationId = "com.alify.spotify"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.5.2"
+        versionCode = 17
+        versionName = "1.5.4"
 
         manifestPlaceholders["redirectSchemeName"] = "alify"
         manifestPlaceholders["redirectHostName"] = "callback"

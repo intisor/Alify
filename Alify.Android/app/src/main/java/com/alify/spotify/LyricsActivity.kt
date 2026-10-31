@@ -68,6 +68,13 @@ class LyricsActivity : AppCompatActivity() {
         }
 
         binding.btnRetryLyrics.setOnClickListener {
+            LrclibClient.invalidateCache(currentArtistName, currentTrackName)
+            val cacheKey = if (currentTrackName.isNotBlank() && currentArtistName.isNotBlank()) {
+                "${currentArtistName.trim().lowercase()}::${currentTrackName.trim().lowercase()}"
+            } else ""
+            if (cacheKey.isNotBlank()) {
+                AlifyMonitorService.auditCache.remove(cacheKey)
+            }
             fetchAndAuditLyrics(currentTrackName, currentArtistName, false, null, emptyList(), emptyMap())
         }
 

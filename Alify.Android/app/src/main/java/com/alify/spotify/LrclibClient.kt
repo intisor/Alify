@@ -32,6 +32,45 @@ class LrclibClient {
             val key = "${artist.trim().lowercase()}::${track.trim().lowercase()}"
             return lyricsCache[key]
         }
+
+        fun invalidateCache(artist: String, track: String) {
+            val rawKey = "${artist.trim().lowercase()}::${track.trim().lowercase()}"
+            lyricsCache.remove(rawKey)
+        }
+
+        fun isCandidateMatch(
+            candidateArtist: String,
+            candidateTitle: String,
+            expectedArtist: String,
+            expectedTitle: String
+        ): Boolean {
+            fun clean(s: String): String {
+                return s.lowercase()
+                    .replace(Regex("""[\(\[][^\)\]]*[\)\]]"""), "")
+                    .replace(Regex("""[^a-z0-9\s]"""), " ")
+                    .split(Regex("""\s+"""))
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ")
+            }
+
+            val cArt = clean(candidateArtist)
+            val cTit = clean(candidateTitle)
+            val eArt = clean(expectedArtist)
+            val eTit = clean(expectedTitle)
+
+            if (cArt.isBlank() || cTit.isBlank() || eArt.isBlank() || eTit.isBlank()) return false
+
+            val titleMatches = cTit.contains(eTit) || eTit.contains(cTit)
+            if (!titleMatches) return false
+
+            val artMatches = cArt.contains(eArt) || eArt.contains(cArt) || run {
+                val eFirst = eArt.split(" ").firstOrNull() ?: ""
+                val cFirst = cArt.split(" ").firstOrNull() ?: ""
+                eFirst.isNotBlank() && (cArt.contains(eFirst) || eFirst == cFirst)
+            }
+
+            return artMatches
+        }
     }
 
     private val httpClient = OkHttpClient.Builder()
@@ -180,9 +219,17 @@ class LrclibClient {
                 val array = JSONArray(body)
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
-                    val lyrics = extractLyricsFromJsonObject(item)
-                    if (!lyrics.isNullOrBlank()) {
-                        return lyrics
+                    val itemArtist = item.optString("artistName", "")
+                    val itemTrack = item.optString("trackName", "")
+
+                    if (isCandidateMatch(itemArtist, itemTrack, artist, track)) {
+                        val lyrics = extractLyricsFromJsonObject(item)
+                        if (!lyrics.isNullOrBlank()) {
+                            Log.i(TAG, "Stage 3 (LRCLIB Search): Verified match '$itemTrack' by '$itemArtist'")
+                            return lyrics
+                        }
+                    } else {
+                        Log.d(TAG, "LRCLIB candidate rejected: '$itemTrack' by '$itemArtist' does not match '$track' by '$artist'")
                     }
                 }
                 null
@@ -219,11 +266,17 @@ class LrclibClient {
                         if (hits != null) {
                             for (i in 0 until hits.length()) {
                                 val hit = hits.getJSONObject(i)
-                                val result = hit.optJSONObject("result")
-                                val url = result?.optString("url") ?: ""
-                                if (url.isNotBlank() && url.contains("-lyrics")) {
+                                val result = hit.optJSONObject("result") ?: continue
+                                val hitTitle = result.optString("title", "")
+                                val hitArtist = result.optJSONObject("primary_artist")?.optString("name", "") ?: ""
+                                val url = result.optString("url", "")
+
+                                if (url.isNotBlank() && url.contains("-lyrics") && isCandidateMatch(hitArtist, hitTitle, artist, track)) {
+                                    Log.i(TAG, "Stage 4 (Genius Search): Verified candidate '$hitTitle' by '$hitArtist' (URL: $url)")
                                     songUrl = url
                                     break
+                                } else {
+                                    Log.d(TAG, "Genius candidate rejected: '$hitTitle' by '$hitArtist' does not match '$track' by '$artist'")
                                 }
                             }
                         }

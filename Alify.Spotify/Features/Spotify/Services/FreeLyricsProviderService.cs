@@ -123,6 +123,15 @@ namespace Alify.Features.Spotify.Services
                     {
                         foreach (var item in doc.RootElement.EnumerateArray())
                         {
+                            var itemArtist = item.TryGetProperty("artistName", out var aProp) ? aProp.GetString() ?? "" : "";
+                            var itemTrack = item.TryGetProperty("trackName", out var tProp) ? tProp.GetString() ?? "" : "";
+
+                            if (!IsCandidateMatch(itemArtist, itemTrack, cleanArtist, cleanTrack))
+                            {
+                                _logger.LogDebug("LRCLIB candidate mismatch: '{CandidateTrack}' by '{CandidateArtist}' rejected for '{Track}' by '{Artist}'", itemTrack, itemArtist, cleanTrack, cleanArtist);
+                                continue;
+                            }
+
                             if (item.TryGetProperty("plainLyrics", out var plainProp) &&
                                 plainProp.ValueKind == JsonValueKind.String &&
                                 !string.IsNullOrWhiteSpace(plainProp.GetString()))
@@ -190,10 +199,32 @@ namespace Alify.Features.Spotify.Services
                                         urlProp.ValueKind == JsonValueKind.String)
                                     {
                                         var url = urlProp.GetString();
-                                        if (!string.IsNullOrWhiteSpace(url) && url.Contains("-lyrics"))
+                                        var hitTitle = resultProp.TryGetProperty("title", out var titleProp) ? titleProp.GetString() ?? "" : "";
+                                        var hitArtist = resultProp.TryGetProperty("primary_artist", out var artistProp) && artistProp.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
+
+                                        bool isMatch = false;
+                                        if (!string.IsNullOrWhiteSpace(hitTitle) && !string.IsNullOrWhiteSpace(hitArtist))
                                         {
+                                            isMatch = IsCandidateMatch(hitArtist, hitTitle, cleanArtist, cleanTrack);
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(url))
+                                        {
+                                            var slug = url.Replace("https://genius.com/", "").Replace("-lyrics", "").ToLowerInvariant();
+                                            var cleanA = CleanString(cleanArtist);
+                                            var cleanT = CleanString(cleanTrack);
+                                            isMatch = (string.IsNullOrEmpty(cleanA) || slug.Contains(cleanA.Replace(" ", "-")) || slug.Contains(cleanA.Split(' ')[0])) &&
+                                                      (string.IsNullOrEmpty(cleanT) || slug.Contains(cleanT.Replace(" ", "-")) || slug.Contains(cleanT.Split(' ')[0]));
+                                        }
+
+                                        if (!string.IsNullOrWhiteSpace(url) && url.Contains("-lyrics") && isMatch)
+                                        {
+                                            _logger.LogInformation("Genius verified match: '{HitTitle}' by '{HitArtist}' (URL: {Url})", hitTitle, hitArtist, url);
                                             songPageUrl = url;
                                             break;
+                                        }
+                                        else
+                                        {
+                                            _logger.LogDebug("Genius candidate rejected: '{HitTitle}' by '{HitArtist}' does not match '{Track}' by '{Artist}'", hitTitle, hitArtist, cleanTrack, cleanArtist);
                                         }
                                     }
                                 }
@@ -344,6 +375,42 @@ namespace Alify.Features.Spotify.Services
 
             var split = Regex.Split(artist, @"(?:\s*,\s*|\s+(?:&|feat\.?|ft\.?)\s+)", RegexOptions.IgnoreCase);
             return split.Length > 0 ? split[0].Trim() : artist.Trim();
+        }
+
+        private static string CleanString(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var lower = s.ToLowerInvariant();
+            var stripped = System.Text.RegularExpressions.Regex.Replace(lower, @"[\(\[][^\)\]]*[\)\]]", "");
+            var alphaNum = System.Text.RegularExpressions.Regex.Replace(stripped, @"[^a-z0-9\s]", " ");
+            return string.Join(" ", alphaNum.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        private static bool IsCandidateMatch(string candidateArtist, string candidateTitle, string expectedArtist, string expectedTitle)
+        {
+            var cArt = CleanString(candidateArtist);
+            var cTit = CleanString(candidateTitle);
+            var eArt = CleanString(expectedArtist);
+            var eTit = CleanString(expectedTitle);
+
+            if (string.IsNullOrEmpty(cArt) || string.IsNullOrEmpty(cTit) || string.IsNullOrEmpty(eArt) || string.IsNullOrEmpty(eTit))
+                return false;
+
+            bool titleMatches = cTit.Contains(eTit) || eTit.Contains(cTit);
+            if (!titleMatches) return false;
+
+            bool artMatches = cArt.Contains(eArt) || eArt.Contains(cArt);
+            if (!artMatches)
+            {
+                var eFirst = eArt.Split(' ').FirstOrDefault() ?? string.Empty;
+                var cFirst = cArt.Split(' ').FirstOrDefault() ?? string.Empty;
+                if (!string.IsNullOrEmpty(eFirst) && (cArt.Contains(eFirst) || eFirst == cFirst))
+                {
+                    artMatches = true;
+                }
+            }
+
+            return artMatches;
         }
 
         private static string StripLrcTimestamps(string syncedLyrics)
