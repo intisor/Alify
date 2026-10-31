@@ -377,6 +377,10 @@ class FilterEngine(
                     httpClient.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
                             Log.w(TAG, "Provider $model returned HTTP ${response.code}")
+                            if (response.code == 429) {
+                                // Key rate-limited: exit early to let competing parallel provider win immediately
+                                return null
+                            }
                             return@use
                         }
                         val body = response.body?.string() ?: return@use
@@ -418,6 +422,10 @@ class FilterEngine(
                     httpClient.newCall(request).execute().use { response ->
                         if (!response.isSuccessful) {
                             Log.w(TAG, "Gemini $model returned HTTP ${response.code}")
+                            if (response.code == 429) {
+                                // Key rate-limited: exit early to let competing parallel provider win immediately
+                                return null
+                            }
                             return@use
                         }
                         val body = response.body?.string() ?: return@use

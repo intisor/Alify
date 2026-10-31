@@ -17,7 +17,7 @@ data class DashboardTrackEntry(
 
 data class DashboardStats(
     val totalPlayed: Int,
-    val totalSkipped: Int,
+    val totalClean: Int,
     val totalFlagged: Int,
     val totalNoLyrics: Int
 )
@@ -25,7 +25,7 @@ data class DashboardStats(
 object DashboardStatsManager {
     private const val PREFS_NAME = "hujjify_dashboard_stats"
     private const val KEY_TOTAL_PLAYED = "total_played"
-    private const val KEY_TOTAL_SKIPPED = "total_skipped"
+    private const val KEY_TOTAL_CLEAN = "total_clean"
     private const val KEY_TOTAL_FLAGGED = "total_flagged"
     private const val KEY_TOTAL_NO_LYRICS = "total_no_lyrics"
     private const val KEY_RECENT_TRACKS = "recent_tracks_json"
@@ -51,14 +51,14 @@ object DashboardStatsManager {
         val played = prefs.getInt(KEY_TOTAL_PLAYED, 0) + 1
         editor.putInt(KEY_TOTAL_PLAYED, played)
 
-        if (isFlagged) {
+        if (isFlagged || isSkipped) {
             val flagged = prefs.getInt(KEY_TOTAL_FLAGGED, 0) + 1
             editor.putInt(KEY_TOTAL_FLAGGED, flagged)
+        } else {
+            val clean = prefs.getInt(KEY_TOTAL_CLEAN, 0) + 1
+            editor.putInt(KEY_TOTAL_CLEAN, clean)
         }
-        if (isSkipped) {
-            val skipped = prefs.getInt(KEY_TOTAL_SKIPPED, 0) + 1
-            editor.putInt(KEY_TOTAL_SKIPPED, skipped)
-        }
+
         if (!hasLyrics) {
             val noLyrics = prefs.getInt(KEY_TOTAL_NO_LYRICS, 0) + 1
             editor.putInt(KEY_TOTAL_NO_LYRICS, noLyrics)
@@ -120,7 +120,7 @@ object DashboardStatsManager {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return DashboardStats(
             totalPlayed = prefs.getInt(KEY_TOTAL_PLAYED, 0),
-            totalSkipped = prefs.getInt(KEY_TOTAL_SKIPPED, 0),
+            totalClean = prefs.getInt(KEY_TOTAL_CLEAN, 0),
             totalFlagged = prefs.getInt(KEY_TOTAL_FLAGGED, 0),
             totalNoLyrics = prefs.getInt(KEY_TOTAL_NO_LYRICS, 0)
         )

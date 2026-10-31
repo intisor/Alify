@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateDashboardUI() {
         val stats = DashboardStatsManager.getStats(this)
         binding.tvStatPlayed.text = stats.totalPlayed.toString()
-        binding.tvStatSkipped.text = stats.totalSkipped.toString()
+        binding.tvStatClean.text = stats.totalClean.toString()
         binding.tvStatFlagged.text = stats.totalFlagged.toString()
         binding.tvStatNoLyrics.text = stats.totalNoLyrics.toString()
 

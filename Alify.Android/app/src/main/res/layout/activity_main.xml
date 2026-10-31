@@ -285,7 +285,7 @@
                             android:textSize="10sp" />
                     </LinearLayout>
 
-                    <!-- Skipped -->
+                    <!-- Clean -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -297,23 +297,23 @@
                         android:layout_marginHorizontal="2dp">
 
                         <TextView
-                            android:id="@+id/tvStatSkipped"
+                            android:id="@+id/tvStatClean"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0"
-                            android:textColor="@color/flag_red_light"
+                            android:textColor="@color/spotify_green"
                             android:textSize="18sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Skipped"
+                            android:text="Clean"
                             android:textColor="@color/spotify_sub_text"
                             android:textSize="10sp" />
                     </LinearLayout>
 
-                    <!-- Flagged -->
+                    <!-- Flagged & Skipped -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -336,7 +336,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Flagged"
+                            android:text="Skipped"
                             android:textColor="@color/spotify_sub_text"
                             android:textSize="10sp" />
                     </LinearLayout>
