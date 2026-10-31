@@ -67,6 +67,10 @@ class LyricsActivity : AppCompatActivity() {
             finish()
         }
 
+        binding.btnRetryLyrics.setOnClickListener {
+            fetchAndAuditLyrics(currentTrackName, currentArtistName, false, null, emptyList(), emptyMap())
+        }
+
         val trackName = intent.getStringExtra(EXTRA_TRACK_NAME) ?: AlifyMonitorService.lastTrackName
         val artistName = intent.getStringExtra(EXTRA_ARTIST_NAME) ?: AlifyMonitorService.lastArtistName
         val isFlagged = intent.getBooleanExtra(EXTRA_IS_FLAGGED, AlifyMonitorService.isLastFlagged)
@@ -134,7 +138,8 @@ class LyricsActivity : AppCompatActivity() {
         initialAnnotations: Map<String, String>
     ) {
         binding.pbLyricsLoading.visibility = View.VISIBLE
-        binding.tvNoLyrics.visibility = View.GONE
+        binding.layoutNoLyrics.visibility = View.GONE
+        binding.svLyricsContent.visibility = View.GONE
 
         lifecycleScope.launch {
             val filterEngine = FilterEngine.fromPreferences(this@LyricsActivity)
@@ -183,7 +188,8 @@ class LyricsActivity : AppCompatActivity() {
                 }
             } else {
                 binding.pbLyricsLoading.visibility = View.GONE
-                binding.tvNoLyrics.visibility = View.VISIBLE
+                binding.layoutNoLyrics.visibility = View.VISIBLE
+                binding.svLyricsContent.visibility = View.GONE
             }
         }
     }
@@ -193,6 +199,8 @@ class LyricsActivity : AppCompatActivity() {
         flaggedLines: List<String>,
         annotations: Map<String, String>
     ) {
+        binding.svLyricsContent.visibility = View.VISIBLE
+        binding.layoutNoLyrics.visibility = View.GONE
         binding.llLyricsContainer.removeAllViews()
         val lines = lyrics.lines()
         var lineNumber = 1

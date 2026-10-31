@@ -41,6 +41,7 @@ namespace Alify.Pages
         public string AlbumArtUrl { get; set; } = string.Empty;
         public string StatusMessage { get; set; } = string.Empty;
         public SpotifyPlaybackInfo PlaybackInfo { get; set; } = new SpotifyPlaybackInfo();
+        public PlaybackDashboardStats Stats { get; set; } = new PlaybackDashboardStats();
         public bool IsMonitoring { get; set; }
         public PrivateUser? CurrentUser { get; set; }
 

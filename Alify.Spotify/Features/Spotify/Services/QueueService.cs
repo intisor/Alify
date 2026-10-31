@@ -241,6 +241,13 @@ namespace Alify.Features.Spotify.Services
 					}
 				}
 			}
+
+			PlaybackDashboardStats.RecordAudit(
+				trackId,
+				trackObj.IsFlagged,
+				isSkipped: false,
+				hasLyrics: !string.IsNullOrWhiteSpace(lyrics)
+			);
 		}
 
 		private void EnrichFromCache(Track trackObj, string userId, UserFilterPreferences userPrefs)
@@ -568,6 +575,13 @@ namespace Alify.Features.Spotify.Services
                     queue.DequeueTrack();
                     var cacheKey = $"queue_{userId}";
                     _cache.Set(cacheKey, queue, TimeSpan.FromMinutes(5));
+
+                    PlaybackDashboardStats.RecordAudit(
+                        currentTarget.FullTrack?.Id ?? "unknown",
+                        isFlagged: true,
+                        isSkipped: true,
+                        hasLyrics: !string.IsNullOrWhiteSpace(currentTarget.Lyrics)
+                    );
 
                     return SkipActionResult.Success(currentTarget, queue.CurrentTrack, string.IsNullOrEmpty(skipReason) ? "Flagged content" : skipReason);
                 }

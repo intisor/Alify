@@ -34,6 +34,8 @@ class AlifyMonitorService : Service() {
     private var filterEngine = FilterEngine()
 
     private var lastTrackId: String? = null
+    private var lastRecordedTrackId: String? = null
+    private val lyricsRetryCounts = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     companion object {
         private const val TAG = "AlifyMonitorService"
@@ -88,6 +90,8 @@ class AlifyMonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         filterEngine = FilterEngine.fromPreferences(this)
         lastTrackId = null // Force fresh audit on service start/restart
+        lastRecordedTrackId = null
+        lyricsRetryCounts.clear()
         if (monitorLoopJob?.isActive != true) {
             monitorLoopJob = scope.launch {
                 monitorLoop()
@@ -137,7 +141,6 @@ class AlifyMonitorService : Service() {
             lastArtistName = artistName
 
             if (trackId == lastTrackId && lastStatusBadge != "⏳ Re-auditing...") return
-            lastTrackId = trackId
 
             // Reload fresh preferences before every track audit
             filterEngine = FilterEngine.fromPreferences(this)
@@ -153,10 +156,14 @@ class AlifyMonitorService : Service() {
                 result = userOverride
                 lyrics = cached?.second ?: LrclibClient.getCachedLyrics(artistName, trackName)
                 lastLyrics = lyrics
+                lastTrackId = trackId
+                lyricsRetryCounts.remove(cacheKey)
             } else if (cached != null && lastStatusBadge != "⏳ Re-auditing...") {
                 result = cached.first
                 lyrics = cached.second
                 lastLyrics = lyrics
+                lastTrackId = trackId
+                lyricsRetryCounts.remove(cacheKey)
                 Log.d(TAG, "Instant zero-latency cache hit for track '$trackName': flagged=${result.isFlagged}")
             } else {
                 lastStatusBadge = "⏳ Auditing with AI..."
@@ -165,7 +172,25 @@ class AlifyMonitorService : Service() {
                 // 1. Fetch Lyrics via parallel waterfall (LRCLIB + Genius parallel race)
                 val aiKey = filterEngine.geminiApiKey
                 lyrics = lrclibClient.getLyrics(artistName, trackName, aiKey)
+
+                // If lyrics not found yet on first pass, provide a grace period / retry
+                if (lyrics.isNullOrBlank()) {
+                    val attempt = (lyricsRetryCounts[cacheKey] ?: 0) + 1
+                    lyricsRetryCounts[cacheKey] = attempt
+                    if (attempt < 2) {
+                        Log.d(TAG, "Lyrics taking time for '$trackName'. Grace attempt $attempt; waiting for retry...")
+                        lastStatusBadge = "⏳ Retrieving lyrics..."
+                        updateNotification("Retrieving lyrics: $trackName")
+                        lastLyrics = null
+                        // Do not lock lastTrackId yet; let the next monitor loop retry
+                        return
+                    }
+                }
+
+                // If lyrics found or attempts reached threshold
+                lyricsRetryCounts.remove(cacheKey)
                 lastLyrics = lyrics
+                lastTrackId = trackId
 
                 // 2. Evaluate via Speculative Multi-Provider LLM Waterfall (Groq || Gemini parallel race)
                 result = filterEngine.evaluate(trackName, artistName, isExplicit, lyrics)
@@ -188,6 +213,23 @@ class AlifyMonitorService : Service() {
             lastFlaggedLines = result.flaggedLines
             lastAnnotations = result.annotations
 
+            // Record into Protection Statistics Dashboard (once per track playback)
+            if (lastRecordedTrackId != trackId) {
+                lastRecordedTrackId = trackId
+                DashboardStatsManager.recordTrackAudit(
+                    context = this@AlifyMonitorService,
+                    trackId = trackId,
+                    title = trackName,
+                    artist = artistName,
+                    isFlagged = result.isFlagged,
+                    isSkipped = result.isFlagged,
+                    hasLyrics = !lyrics.isNullOrBlank(),
+                    flagReason = result.flagReason,
+                    flaggedLines = result.flaggedLines,
+                    lyrics = lyrics
+                )
+            }
+
             if (result.isFlagged) {
                 isLastFlagged = true
                 lastStatusBadge = "✕ Flagged: ${result.flagReason}"
@@ -195,10 +237,10 @@ class AlifyMonitorService : Service() {
                 skipTrack(token)
             } else {
                 isLastFlagged = false
-                lastStatusBadge = if (result.isVerifiedByAi) {
-                    "✓ Clean (AI Verified)"
-                } else {
-                    "⚠️ ${result.flagReason ?: "Unverified"}"
+                lastStatusBadge = when {
+                    !lyrics.isNullOrBlank() && result.isVerifiedByAi -> "✓ Clean (AI Verified)"
+                    lyrics.isNullOrBlank() -> "ℹ️ No lyrics indexed (Clean)"
+                    else -> "⚠️ ${result.flagReason ?: "Unverified"}"
                 }
                 updateNotification("Playing: $trackName - $artistName")
             }

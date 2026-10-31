@@ -11,6 +11,11 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.graphics.Typeface
+import android.text.TextUtils
+import android.view.Gravity
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -119,6 +124,20 @@ class MainActivity : AppCompatActivity() {
                     showClientIdRequiredDialog()
                 }
             }
+        }
+
+        // Reset Dashboard Stats Button
+        binding.btnResetStats.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Reset Protection Stats?")
+                .setMessage("This will reset all audited song counters and clear your recent audit history.")
+                .setPositiveButton("Reset") { _, _ ->
+                    DashboardStatsManager.resetStats(this)
+                    updateDashboardUI()
+                    Toast.makeText(this, "Stats reset", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         // Toggle Protection Button
@@ -233,7 +252,109 @@ class MainActivity : AppCompatActivity() {
                         binding.tvSafetyBadge.setBackgroundResource(R.drawable.badge_clean)
                     }
                 }
+                updateDashboardUI()
                 delay(2000)
+            }
+        }
+    }
+
+    private fun updateDashboardUI() {
+        val stats = DashboardStatsManager.getStats(this)
+        binding.tvStatPlayed.text = stats.totalPlayed.toString()
+        binding.tvStatSkipped.text = stats.totalSkipped.toString()
+        binding.tvStatFlagged.text = stats.totalFlagged.toString()
+        binding.tvStatNoLyrics.text = stats.totalNoLyrics.toString()
+
+        val recentTracks = DashboardStatsManager.getRecentTracks(this)
+        if (recentTracks.isEmpty()) {
+            binding.tvNoRecentActivity.visibility = View.VISIBLE
+            binding.layoutRecentTracks.removeAllViews()
+        } else {
+            binding.tvNoRecentActivity.visibility = View.GONE
+            binding.layoutRecentTracks.removeAllViews()
+
+            for (entry in recentTracks.take(8)) {
+                val row = LinearLayout(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        setMargins(0, 0, 0, 16)
+                    }
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(20, 14, 20, 14)
+                    setBackgroundResource(R.drawable.stat_box_background)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        val intent = LyricsActivity.createIntent(
+                            context = this@MainActivity,
+                            trackName = entry.title,
+                            artistName = entry.artist,
+                            isFlagged = entry.statusBadge == "FLAGGED" || entry.statusBadge == "SKIPPED",
+                            flagReason = entry.flagReason,
+                            flaggedLines = entry.flaggedLines,
+                            lyrics = entry.lyrics
+                        )
+                        startActivity(intent)
+                    }
+                }
+
+                val textLayout = LinearLayout(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    orientation = LinearLayout.VERTICAL
+                }
+
+                val titleTv = TextView(this).apply {
+                    text = entry.title
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.spotify_light_text))
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                }
+
+                val artistTv = TextView(this).apply {
+                    text = entry.artist
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.spotify_sub_text))
+                    textSize = 11f
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                }
+
+                textLayout.addView(titleTv)
+                textLayout.addView(artistTv)
+
+                val badgeTv = TextView(this).apply {
+                    setPadding(18, 6, 18, 6)
+                    textSize = 10f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.spotify_light_text))
+
+                    when (entry.statusBadge) {
+                        "SKIPPED" -> {
+                            text = "⏭ Skipped"
+                            setBackgroundResource(R.drawable.badge_skipped)
+                        }
+                        "FLAGGED" -> {
+                            text = "✕ Flagged"
+                            setBackgroundResource(R.drawable.badge_flagged)
+                        }
+                        "NO_LYRICS" -> {
+                            text = "ℹ️ No Lyrics"
+                            setBackgroundResource(R.drawable.badge_no_lyrics)
+                        }
+                        else -> {
+                            text = "✓ Clean"
+                            setBackgroundResource(R.drawable.badge_clean)
+                        }
+                    }
+                }
+
+                row.addView(textLayout)
+                row.addView(badgeTv)
+                binding.layoutRecentTracks.addView(row)
             }
         }
     }

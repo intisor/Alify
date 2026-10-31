@@ -206,6 +206,207 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Protection Dashboard & Analytics Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardDashboard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="@color/spotify_dark_card"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:contentPadding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Header with Title and Reset Stats -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📊 Protection Analytics"
+                        android:textColor="@color/spotify_light_text"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnResetStats"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:padding="6dp"
+                        android:text="Reset Stats"
+                        android:textColor="@color/spotify_sub_text"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- 4 Metrics Grid: Audited, Skipped, Flagged, No Lyrics -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:weightSum="4"
+                    android:layout_marginBottom="16dp">
+
+                    <!-- Audited / Played -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:background="@drawable/stat_box_background"
+                        android:padding="8dp"
+                        android:layout_marginEnd="3dp">
+
+                        <TextView
+                            android:id="@+id/tvStatPlayed"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/spotify_green"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Audited"
+                            android:textColor="@color/spotify_sub_text"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <!-- Skipped -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:background="@drawable/stat_box_background"
+                        android:padding="8dp"
+                        android:layout_marginHorizontal="2dp">
+
+                        <TextView
+                            android:id="@+id/tvStatSkipped"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/flag_red_light"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Skipped"
+                            android:textColor="@color/spotify_sub_text"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <!-- Flagged -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:background="@drawable/stat_box_background"
+                        android:padding="8dp"
+                        android:layout_marginHorizontal="2dp">
+
+                        <TextView
+                            android:id="@+id/tvStatFlagged"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/flag_red"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Flagged"
+                            android:textColor="@color/spotify_sub_text"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <!-- No Lyrics -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:background="@drawable/stat_box_background"
+                        android:padding="8dp"
+                        android:layout_marginStart="3dp">
+
+                        <TextView
+                            android:id="@+id/tvStatNoLyrics"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/accent_blue"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="No Lyrics"
+                            android:textColor="@color/spotify_sub_text"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/spotify_black"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Recent Activity Feed Header -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Recent Song Audits"
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Recent Tracks Container -->
+                <LinearLayout
+                    android:id="@+id/layoutRecentTracks"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <TextView
+                    android:id="@+id/tvNoRecentActivity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="No songs audited yet. Play music on Spotify to see activity."
+                    android:textColor="@color/spotify_sub_text"
+                    android:textSize="12sp"
+                    android:fontStyle="italic"
+                    android:paddingVertical="8dp" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- Main Buttons -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLogin"
